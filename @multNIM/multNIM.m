@@ -82,21 +82,6 @@ methods
 	end
 	
 	%%
-	function [sub_outs,fgadd,fgmult] = subunit_outputs( mnim, stims )
-	% Usage: [sub_outs,fgadd,fgmult] = subunit_outputs( mnim, stims )
-	% 
-	% Calculate output of all subunits (addxmult) and separate additive and multiplicative
-	
-		[~,~,mod_internals] = mnim.nim.eval_model( zeros(size(stims{1},1),1), stims );
-		fgadd = mod_internals.fgint;
-		fgmult = mnim.calc_gmults(stims);
-		sub_outs = fgadd;
-		for nn = 1:length(mnim.Msubunits)
-			sub_outs(:,mnim.Mtargets(nn)) = fgadd(:,mnim.Mtargets(nn)) .* fgmult(nn);
-		end
-	end
-
-	%%
 	function mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
 	% Usage: mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
 		
@@ -140,6 +125,11 @@ methods
 	function mnim_out = fit_filters( mnim, Robs, stims, varargin )
 	% Usage: mnim = mnim.fit_filters( Robs, stims, Uindx, varargin )
 	
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
 		if ~isempty(varargin) && iscell(varargin) && iscell(varargin{1})
 			varargin = varargin{1};
 		end
@@ -159,14 +149,18 @@ methods
 	%
 	% Enter Msubunits to optimize using 'subs' option, numbered by their index in Msubunits
 	
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
 		if ~isempty(varargin) && iscell(varargin) && iscell(varargin{1})
 			varargin = varargin{1};
 		end
 		
 		% Determine valid targets
 		pos = 1; jj = 1;
-		NMsubs = length(mnim.Msubunits);
-		Msubs = 1:NMsubs;
+		Mtar = 1:length(mnim.Msubunits);
 		modvarargin = {};
 		if ~ischar(varargin{jj})  %if not a flag, it must be train_inds
 			modvarargin{pos} = varargin{jj};
@@ -175,9 +169,9 @@ methods
 		while jj <= length(varargin)
 			switch varargin{jj}
 				case 'subs'
-					Msubs = varargin{jj+1};
+					Mtar = varargin{jj+1};
 					jj = jj + 2;
-					assert( sum(Msubs > length(mnim.Msubunits)) == 0, 'Invalid multiplicative targets.' )
+					assert( sum(Mtar > length(mnim.Msubunits)) == 0, 'Invalid multiplicative targets.' )
 				otherwise
 					modvarargin{pos} = varargin{jj};
 					pos = pos + 1;
@@ -185,29 +179,41 @@ methods
 			end
 		end
 		
+		NMsubs = length(Mtar);
+
 		% Extract relevant multiplicative elements for Msubunits
 		[subouts,fadd] = mnim.subunit_outputs( stims );
 		
-		gmults = ones(size(subouts,1),NMsubs+1);
-		for nn = 1:Msubs
-			gmults(:,nn) = fadd(:,mnim.Mtargets(Msubs(nn)));
+		% Assign subunits as multipliers for targets
+		gmults = ones(size(subouts,1),NMsubs+1);  % extra-dim of ones is to multiply additive term
+		for nn = 1:Mtar
+			gmults(:,nn) = fadd(:,mnim.Mtargets(Mtar(nn)));
 		end
 		SumXtar = length(stims)+1; 
+		
 		% Add all non-targets with additive components from targets
 		stims{SumXtar} = zeros(size(subouts,1),1);
 		for nn = 1:length(mnim.nim.subunits)
-			stims{SumXtar} = stims{SumXtar} + fadd(:,nn);
+			if ismember(nn,Mtar)
+				stims{SumXtar} = stims{SumXtar} + fadd(:,nn); % additive component if target
+			else
+				stims{SumXtar} = stims{SumXtar} + subouts(:,nn); % fully multiplied component of nontargets
+			end
 		end
 		
 		% Construct NIM for filter minimization
 		nimtmp = mnim.nim;
-		nimtmp.subunits = mnim.Msubunits(Msubs);
+		nimtmp.subunits = mnim.Msubunits(Mtar);
 		%for nn = 1:length(Msubs)
+		
+		% make last NIM-subunit add in additive terms
 		nimtmp.subunits(NMsubs+1) = nimtmp.subunits(NMsubs);
 		nimtmp.subunits(end).Xtarg = SumXtar;
 		nimtmp.subunits(end).filtK = 1;
-		if isfield(nimtmp.subunits(end),'kt')
+		nimtmp.subunits(end).NLoffset = 0;
+		if isa(nimtmp.subunits(end),'LRSUBUNIT')
 			nimtmp.subunits(end).kt = 1;
+			nimtmp.subunits(end).ksp = 1;
 		end
 		nimtmp.subunits(end).NLtype = 'lin';
 		nimtmp.subunits(end).weight = 1;
@@ -218,6 +224,7 @@ methods
 		stimpar1 = nimtmp.stim_params(1);
 		stimpar1.dims = [1 1 1];
 		stimpar1.tent_spacing = [];
+		stimpar1.up_fac = 1;  % since any up_fac is already taken into account in subunit outputs
 		nimtmp.stim_params(SumXtar) = stimpar1;
 		
 		modvarargin{pos} = 'gain_funs';
@@ -292,8 +299,35 @@ methods
 		Nmods = length(nimtmp.subunits);
 		fprintf( 'Regular Subunits: 1-%d\n   Mult Subunits: %d-%d\n', Nmods, Nmods+1, Nmods+length(mnim.Msubunits) )
 		nimtmp.subunits = cat(1,nimtmp.subunits, mnim.Msubunits );
-		nimtmp.display_model_dab( Xstim, Robs );
+		if strcmp(class(nimtmp),'NIM')
+			nimtmp.display_model_dab( Xstim, Robs );
+		else
+			nimtmp.display_model( Xstim, Robs );
+		end
 	end
+
+	%%
+	function [sub_outs,fgadd,fgmult] = subunit_outputs( mnim, stims )
+	% Usage: [sub_outs,fgadd,fgmult] = subunit_outputs( mnim, stims )
+	% 
+	% Calculate output of all subunits (addxmult) and separate additive and multiplicative
+	
+		[~,~,mod_internals] = mnim.nim.eval_model( [], stims );
+		fgadd = mod_internals.fgint;
+		
+		% multiply by excitatory and inhibitory weights
+		for nn = 1:length(mnim.nim.subunits)
+			fgadd(:,nn) = fgadd(:,nn) * mnim.nim.subunits(nn).weight;
+		end
+		
+		% calculate multiplicative effect
+		fgmult = mnim.calc_gmults(stims);
+		sub_outs = fgadd;
+		for nn = 1:length(mnim.Msubunits)
+			sub_outs(:,mnim.Mtargets(nn)) = fgadd(:,mnim.Mtargets(nn)) .* fgmult(nn);
+		end
+	end
+
 	
 end
 
@@ -302,13 +336,15 @@ methods (Hidden)
 	function gmults = calc_gmults( mnim, stims )
 	% Usage: gmults = mnim.calc_gmults( stims )
 			
-		gmults = ones( size(stims{1},1), length(mnim.nim.subunits) );
+		%gmults = ones( size(stims{1},1), length(mnim.nim.subunits) );
+		[~,~,mod_int] = mnim.nim.eval_model( [], stims ); % cheap way to get size of gmults for diff nim classes
+		gmults = ones(size(mod_int.gint));
 	
 		% Calculate Mfilters
 		if ~isempty(mnim.Msubunits)
 			nimtmp = mnim.nim;
 			nimtmp.subunits = mnim.Msubunits;
-			[~,~,mod_int] = nimtmp.eval_model( zeros(size(stims{1},1),1), stims );
+			[~,~,mod_int] = nimtmp.eval_model( [], stims );
 			for nn = 1:length(mnim.Mtargets)
 				gmults(:,mnim.Mtargets(nn)) = 1 + mnim.Msubunits(nn).weight*mod_int.fgint(:,nn);
 			end
