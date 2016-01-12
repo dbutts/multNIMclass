@@ -165,23 +165,23 @@ methods
 	end
 
 	%%
-	function mnim_out = fit_filters( mnim, Robs, stims, varargin )
-	% Usage: mnim = mnim.fit_filters( Robs, stims, Uindx, varargin )
-	
-		if ~iscell(stims)
-			tmp = stims;
-			clear stims
-			stims{1} = tmp;
-		end
-		
-		varargin{end+1} = 'gain_funs';
-		varargin{end+1} = mnim.calc_gmults( stims );
-		%varargin{end+1} = 'fit_offsets';
-		%varargin{end+1} = 1;
-		
-		mnim_out = mnim;
-		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
-	end
+% 	function mnim_out = fit_filters( mnim, Robs, stims, varargin )
+% 	% Usage: mnim = mnim.fit_filters( Robs, stims, Uindx, varargin )
+% 	
+% 		if ~iscell(stims)
+% 			tmp = stims;
+% 			clear stims
+% 			stims{1} = tmp;
+% 		end
+% 		
+% 		varargin{end+1} = 'gain_funs';
+% 		varargin{end+1} = mnim.calc_gmults( stims );
+% 		%varargin{end+1} = 'fit_offsets';
+% 		%varargin{end+1} = 1;
+% 		
+% 		mnim_out = mnim;
+% 		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
+% 	end
 	
 	%%
 	function mnim = reg_path( mnim, Robs, stims, Uindx, XVindx, varargin )
@@ -300,6 +300,7 @@ methods
 		sub_outs = fgadd;
 		for nn = 1:length(mnim.Msubunits)
 			sub_outs(:,mnim.Mtargets(nn)) = fgadd(:,mnim.Mtargets(nn)) .* fgmult(nn);
+           %sub_outs(:,mnim.Mtargets(nn)) = fgadd(:,mnim.Mtargets(nn)) .* fgmult(:,mnim.Mtargets(nn)); 
 		end
 	end
 
@@ -412,7 +413,7 @@ methods (Hidden)
 		end
 		nim.subunits(end).NLtype = 'lin';
 		nim.subunits(end).weight = 1;
-		nim.subunits(end).reg_lambdas = SUBUNIT.init_reg_lamdas();
+		nim.subunits(end).reg_lambdas = SUBUNIT.init_reg_lambdas();
 		%end
 
 		% Add Xmatrix with summed non-target components
