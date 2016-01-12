@@ -19,20 +19,20 @@ classdef multNIM
 	end
 		
 	%% METHODS DEFINED IN SEPARATE FILES
-  methods 
+%  methods 
 		%[] = display_model(nim,Robs,Xstims,varargin); %display current model
-	end
+%	end
 	
-	methods (Static)
+%	methods (Static)
     %Xmat = create_time_embedding( stim, params ) %make time-embedded stimulus
-	end
-	methods (Static, Hidden)
+%	end
+%	methods (Static, Hidden)
 		%Tmat = create_Tikhonov_matrix( stim_params, reg_type ); %make regularization matrices
-	end
+%	end
 	
 	
 methods
-        
+	
 	%% CONSTRUCTOR
 	function mnim = multNIM( nim, Msubunits, Mtargets )
 	% Usage: mnim = multNIM( nim, <Msubunits, Mtargets> )
@@ -45,16 +45,12 @@ methods
 		mnim.Mtargets = [];
 		%mnim.fit_props = [];
 		Nsubs = length(nim.subunits);
-		%mnim.normal_subs = 1:Nsubs;
 		if nargin < 2
 			return
 		end
 		assert( nargin == 3, 'Must specify targets as well as subunits' )
-		%assert( sum( Msubunits <= Nsubs), 'Msubunits out of range.' )
 		assert( length(Msubunits) == length(Mtargets), 'Mtargets out of range.' )
-		%assert( isempty(Msubunits,Mtargets), 'Mtargets cannot be multiplicative subunits' )
 		mnim.Msubunits = Msubunits;
-		%mnim.normal_subs = setdiff(Nsubs, Msubunits );
 		mnim.Mtargets = Mtargets;
 	end
 	
@@ -69,11 +65,9 @@ methods
 		%assert( ismember(mnim.normal_subs, Mtarget), 'Mtarget must be an existing subunit.' )
 		assert( Mtarget <= length(mnim.nim.subunits), 'Mtarget must be an existing subunit.' )
 		if strcmp( class( subunit ), 'double' ) 
-			%assert( ismember(mnim.normal_subs,subunit), 'subunit to be multiplicative must be a normal subunit' )
 			assert( subunit <= length(mnim.nim.subunits), 'subunit to be multiplicative must be a normal subunit' )
 			Msubunit = mnim.subunits(subunit);
 			% Default nonlinearity/scaling?
-			%mnim.normal_subs = setdiff( mnim.normal_subs, Msubunit );
 		else
 			mnim.Msubunits = cat(1, mnim.Msubunits, subunit );
 		end
@@ -88,17 +82,15 @@ methods
 		LLtol = 0.0002; MAXiter = 12;
 
 		% Check to see if silent (for alt function)
-		silent = 0;
-		if ~isempty(varargin)
-			for j = 1:length(varargin)
-				if strcmp( varargin{j}, 'silent' )
-					silent = varargin{j+1};
-				end
-			end	
+		[~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'silent'} );
+		if isfield( parsed_options, 'silent' )
+			silent = parsed_options.silent;
+		else
+			silent = 0;
 		end
 					
-		varargin{end+1} = 'silent';
-		varargin{end+1} = 1;
+		modvarargin{end+1} = 'silent';
+		modvarargin{end+1} = 1;
 
 		LL = mnim.nim.fit_props.LL; LLpast = -1e10;
 		if ~silent
@@ -108,8 +100,8 @@ methods
 		mnim_out = mnim;
 		while (((LL-LLpast) > LLtol) && (iter < MAXiter))
 	
-			mnim_out = mnim_out.fit_Mfilters( Robs, stims, varargin );
-			mnim_out = mnim_out.fit_filters( Robs, stims, varargin );
+			mnim_out = mnim_out.fit_Mfilters( Robs, stims, modvarargin{:} );
+			mnim_out = mnim_out.fit_filters( Robs, stims, modvarargin{:} );
 
 			LLpast = LL;
 			LL = mnim_out.nim.fit_props.LL;
@@ -130,9 +122,6 @@ methods
 			clear stims
 			stims{1} = tmp;
 		end
-		if ~isempty(varargin) && iscell(varargin) && iscell(varargin{1})
-			varargin = varargin{1};
-		end
 		
 		varargin{end+1} = 'gain_funs';
 		varargin{end+1} = mnim.calc_gmults( stims );
@@ -140,7 +129,7 @@ methods
 		%varargin{end+1} = 1;
 		
 		mnim_out = mnim;
-		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin );
+		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
 	end
 	
 	%%
@@ -149,92 +138,24 @@ methods
 	%
 	% Enter Msubunits to optimize using 'subs' option, numbered by their index in Msubunits
 	
-		if ~iscell(stims)
-			tmp = stims;
-			clear stims
-			stims{1} = tmp;
-		end
-		if ~isempty(varargin) && iscell(varargin) && iscell(varargin{1})
-			varargin = varargin{1};
-		end
-		
-		% Determine valid targets
-		pos = 1; jj = 1;
-		Mtar = 1:length(mnim.Msubunits);
-		modvarargin = {};
-		if ~ischar(varargin{jj})  %if not a flag, it must be train_inds
-			modvarargin{pos} = varargin{jj};
-      jj = jj + 1; pos = pos + 1;
-		end
-		while jj <= length(varargin)
-			switch varargin{jj}
-				case 'subs'
-					Mtar = varargin{jj+1};
-					jj = jj + 2;
-					assert( sum(Mtar > length(mnim.Msubunits)) == 0, 'Invalid multiplicative targets.' )
-				otherwise
-					modvarargin{pos} = varargin{jj};
-					pos = pos + 1;
-					jj = jj + 1;
-			end
+		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs'} );
+		if isfield( parsed_inputs, 'subs' )
+			Mtar = parsed_inputs.subs;
+		else
+			Mtar = 1:length( mnim.Msubunits );
 		end
 		
 		NMsubs = length(Mtar);
+		[nimtmp,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtar );
 
-		% Extract relevant multiplicative elements for Msubunits
-		[subouts,fadd] = mnim.subunit_outputs( stims );
-		
-		% Assign subunits as multipliers for targets
-		gmults = ones(size(subouts,1),NMsubs+1);  % extra-dim of ones is to multiply additive term
-		for nn = 1:Mtar
-			gmults(:,nn) = fadd(:,mnim.Mtargets(Mtar(nn)));
-		end
-		SumXtar = length(stims)+1; 
-		
-		% Add all non-targets with additive components from targets
-		stims{SumXtar} = zeros(size(subouts,1),1);
-		for nn = 1:length(mnim.nim.subunits)
-			if ismember(nn,Mtar)
-				stims{SumXtar} = stims{SumXtar} + fadd(:,nn); % additive component if target
-			else
-				stims{SumXtar} = stims{SumXtar} + subouts(:,nn); % fully multiplied component of nontargets
-			end
-		end
-		
-		% Construct NIM for filter minimization
-		nimtmp = mnim.nim;
-		nimtmp.subunits = mnim.Msubunits(Mtar);
-		%for nn = 1:length(Msubs)
-		
-		% make last NIM-subunit add in additive terms
-		nimtmp.subunits(NMsubs+1) = nimtmp.subunits(NMsubs);
-		nimtmp.subunits(end).Xtarg = SumXtar;
-		nimtmp.subunits(end).filtK = 1;
-		nimtmp.subunits(end).NLoffset = 0;
-		if isa(nimtmp.subunits(end),'LRSUBUNIT')
-			nimtmp.subunits(end).kt = 1;
-			nimtmp.subunits(end).ksp = 1;
-		end
-		nimtmp.subunits(end).NLtype = 'lin';
-		nimtmp.subunits(end).weight = 1;
-		nimtmp.subunits(end).reg_lambdas = SUBUNIT.init_reg_lamdas();
-		%end
-
-		% Add Xmatrix with summed non-target components
-		stimpar1 = nimtmp.stim_params(1);
-		stimpar1.dims = [1 1 1];
-		stimpar1.tent_spacing = [];
-		stimpar1.up_fac = 1;  % since any up_fac is already taken into account in subunit outputs
-		nimtmp.stim_params(SumXtar) = stimpar1;
-		
-		modvarargin{pos} = 'gain_funs';
-		modvarargin{pos+1} = gmults;
-		modvarargin{pos+2} = 'subs';
-		modvarargin{pos+3} = 1:NMsubs;
+		modvarargin{end+1} = 'gain_funs';
+		modvarargin{end+1} = gmults;
+		modvarargin{end+1} = 'subs';
+		modvarargin{end+1} = 1:NMsubs;
 		%modvarargin{pos+4} = 'fit_offsets';
 		%modvarargin{pos+5} = 1;
 
-		nimtmp = nimtmp.fit_filters( Robs, stims, modvarargin );
+		nimtmp = nimtmp.fit_filters( Robs, stims_plus, modvarargin{:} );
 		
 		% Copy filters back to their locations
 		mnim_out = mnim;
@@ -242,22 +163,76 @@ methods
 		mnim_out.nim = nimtmp;
 		mnim_out.nim.subunits = mnim.nim.subunits;
 	end
+
+	%%
+	function mnim_out = fit_filters( mnim, Robs, stims, varargin )
+	% Usage: mnim = mnim.fit_filters( Robs, stims, Uindx, varargin )
+	
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
+		
+		varargin{end+1} = 'gain_funs';
+		varargin{end+1} = mnim.calc_gmults( stims );
+		%varargin{end+1} = 'fit_offsets';
+		%varargin{end+1} = 1;
+		
+		mnim_out = mnim;
+		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
+	end
+	
+	%%
+	function mnim = reg_path( mnim, Robs, stims, Uindx, XVindx, varargin )
+	%	Usage: mnim = reg_path( mnim, Robs, stims, Uindx, XVindx, varargin )
+
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
+		
+		varargin{end+1} = 'gain_funs';
+		varargin{end+1} = mnim.calc_gmults( stims );
+		%varargin{end+1} = 'fit_offsets';
+		%varargin{end+1} = 1;
+		
+		mnim_out = mnim;
+		mnim_out.nim = mnim.nim.reg_path( Robs, stims, Uindx, XVindx, varargin{:} );
+	end
+	
+	%%
+	function mnim = reg_pathM( mnim, Robs, stims, Uindx, XVindx, varargin )
+	%	Usage: mnim = reg_pathM( mnim, Robs, stims, Uindx, XVindx, varargin )
+
+		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs'} );
+		if isfield( parsed_inputs, 'subs' )
+			Mtar = parsed_inputs.subs;
+		else
+			Mtar = 1:length( mnim.Msubunits );
+		end
+
+		[nimtmp,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtar );
+		
+		modvarargin{end+1} = 'gain_funs';
+		modvarargin{end+1} = gmults;
+		modvarargin{end+1} = 'subs';
+		modvarargin{end+1} = Mtar;
+		
+		mnim_out = mnim;
+		mnim_out.nim = nimtmp.reg_path( Robs, stims_plus, Uindx, XVindx, modvarargin{:} );
+	end
 	
 	%%
 	function [LL, pred_rate, mod_internals, LL_data] = eval_model( mnim, Robs, stims, varargin )
 	%	Usage: [LL, pred_rate, mod_internals, LL_data] = eval_model( mnim, Robs, stims, varargin )
-
-		if ~isempty(varargin)
-			if iscell(varargin{1}) && (length(varargin{1}) == 1)
-				varargin = varargin{1};
-			end	
-		end
 		
 		varargin{end+1} = 'gain_funs';
 		gmults = mnim.calc_gmults( stims );
 		varargin{end+1} = gmults;
 
-		[LL,pred_rate,mod_internals,LL_data] = mnim.nim.eval_model( Robs, stims, varargin );
+		[LL,pred_rate,mod_internals,LL_data] = mnim.nim.eval_model( Robs, stims, varargin{:} );
 		mod_internals.gain_funs = gmults;
 	end
 	
@@ -331,6 +306,7 @@ methods
 	
 end
 
+%%
 methods (Hidden)
 	
 	function gmults = calc_gmults( mnim, stims )
@@ -349,6 +325,103 @@ methods (Hidden)
 				gmults(:,mnim.Mtargets(nn)) = 1 + mnim.Msubunits(nn).weight*mod_int.fgint(:,nn);
 			end
 		end
+	end
+	
+	%%
+% 	function [Mtar,varargin] = extract_Mtargets( mnim, varargin)
+% 	% Usage: [Mtar,varargin] = extract_Mtargets( mnim, varargin)
+% 	%
+% 	% extract targets from varargin arguments and format into modvarargin
+% 
+% 		Mtar = 1:length(mnim.Msubunits);
+% 		varargin = {};
+% 
+% 		%if ~isempty(varargin) && iscell(varargin) && iscell(varargin{1})
+% 		%	varargin = varargin{1};
+% 		%end
+% 		if isempty(varargin)
+% 			return
+% 		end
+% 		
+% 		pos = 1; jj = 1;
+% 		if ~ischar(varargin{jj})  %if not a flag, it must be train_inds
+% 			modvarargin{pos} = varargin{jj};
+%       jj = jj + 1; pos = pos + 1;
+% 		end
+% 		while jj <= length(varargin)
+% 			switch varargin{jj}
+% 				case 'subs'
+% 					Mtar = varargin{jj+1};
+% 					jj = jj + 2;
+% 					assert( sum(Mtar > NMtar) == 0, 'Invalid multiplicative targets.' )
+% 				otherwise
+% 					modvarargin{pos} = varargin{jj};
+% 					pos = pos + 1;
+% 					jj = jj + 1;
+% 			end
+% 		end
+% 	end
+	
+	
+	%%
+	function [nim,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtargets )
+	% Usage: [nim,gmults,stims] = format4Mfitting( mnim, stims, targets )
+	% 
+	% set up for fitting multiplicative subunits as NIM with gmults and addition stim-matrices
+	
+		if ~iscell(stims)
+			stims_plus{1} = stims;
+		else
+			stims_plus = stims;
+		end
+		NMsubs = length(Mtargets);
+
+		% Extract relevant multiplicative elements for Msubunits
+		[subouts,fadd] = mnim.subunit_outputs( stims_plus );
+		
+		% Assign subunits as multipliers for targets
+		gmults = ones(size(subouts,1),NMsubs+1);  % extra-dim of ones is to multiply additive term
+		for nn = 1:NMsubs
+			gmults(:,nn) = fadd(:,mnim.Mtargets(Mtargets(nn)));
+		end
+		SumXtar = length(stims_plus)+1; 
+		
+		% Add all non-targets with additive components from targets
+		stims_plus{SumXtar} = zeros(size(subouts,1),1);
+		for nn = 1:length(mnim.nim.subunits)
+			if ismember(nn,Mtargets)
+				stims_plus{SumXtar} = stims_plus{SumXtar} + fadd(:,nn); % additive component if target
+			else
+				stims_plus{SumXtar} = stims_plus{SumXtar} + subouts(:,nn); % fully multiplied component of nontargets
+			end
+		end
+		
+		% Construct NIM for filter minimization
+		nim = mnim.nim;
+		nim.subunits = mnim.Msubunits(Mtargets);
+		%for nn = 1:length(Msubs)
+		
+		% make last NIM-subunit add in additive terms
+		nim.subunits(NMsubs+1) = nim.subunits(NMsubs);
+		nim.subunits(end).Xtarg = SumXtar;
+		nim.subunits(end).filtK = 1;
+		nim.subunits(end).NLoffset = 0;
+		if isa(nim.subunits(end),'LRSUBUNIT')
+			nim.subunits(end).kt = 1;
+			nim.subunits(end).ksp = 1;
+		end
+		nim.subunits(end).NLtype = 'lin';
+		nim.subunits(end).weight = 1;
+		nim.subunits(end).reg_lambdas = SUBUNIT.init_reg_lamdas();
+		%end
+
+		% Add Xmatrix with summed non-target components
+		stimpar1 = nim.stim_params(1);
+		stimpar1.dims = [1 1 1];
+		stimpar1.tent_spacing = [];
+		stimpar1.up_fac = 1;  % since any up_fac is already taken into account in subunit outputs
+		nim.stim_params(SumXtar) = stimpar1;
+				
 	end
 	
 end
