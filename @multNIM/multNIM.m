@@ -40,7 +40,13 @@ methods
 	% multNIM must be initialized with a regular NIM. Additional optional arguments specify which subunits
 	% "Msubunits" should be made to be multiplicative, and what their targets are (i.e. what they are multiplying)
 	
-		mnim.nim = nim;
+        % handle the no-input-argument case by returning a null model. This
+        % is important when initializing arrays of objects
+        if nargin == 0
+            return 
+        end
+        
+        mnim.nim = nim;
 		mnim.Msubunits = [];
 		mnim.Mtargets = [];
 		%mnim.fit_props = [];
