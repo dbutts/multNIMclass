@@ -138,6 +138,12 @@ methods
 	%
 	% Enter Msubunits to optimize using 'subs' option, numbered by their index in Msubunits
 	
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
+
 		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs'} );
 		if isfield( parsed_inputs, 'subs' )
 			Mtar = parsed_inputs.subs;
@@ -165,8 +171,8 @@ methods
 	end
 
 	%%
-	function mnim_out = fit_filters( mnim, Robs, stims, varargin )
-	% Usage: mnim = mnim.fit_filters( Robs, stims, Uindx, varargin )
+	function mnim_out = fit_upstreamNLs( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = mnim.fit_upstreamNLs( Robs, stims, Uindx, varargin )
 	
 		if ~iscell(stims)
 			tmp = stims;
@@ -180,8 +186,45 @@ methods
 		%varargin{end+1} = 1;
 		
 		mnim_out = mnim;
-		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
+		mnim_out.nim = mnim.nim.fit_upstreamNLs( Robs, stims, varargin{:} );
 	end
+
+	function mnim_out = fit_MupstreamNLs( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = mnim.fit_MupstreamNLs( Robs, stims, Uindx, varargin )
+	
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
+		
+		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs'} );
+		if isfield( parsed_inputs, 'subs' )
+			Mtar = parsed_inputs.subs;
+		else
+			Mtar = 1:length( mnim.Msubunits );
+		end
+		
+		NMsubs = length(Mtar);
+		[nimtmp,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtar );
+
+		modvarargin{end+1} = 'gain_funs';
+		modvarargin{end+1} = gmults;
+		modvarargin{end+1} = 'subs';
+		modvarargin{end+1} = 1:NMsubs;
+		%modvarargin{pos+4} = 'fit_offsets';
+		%modvarargin{pos+5} = 1;
+
+		nimtmp = nimtmp.fit_upstreamNLs( Robs, stims_plus, modvarargin{:} );
+		
+		% Copy filters back to their locations
+		mnim_out = mnim;
+		mnim_out.Msubunits = nimtmp.subunits(1:NMsubs);
+		mnim_out.nim = nimtmp;
+		mnim_out.nim.subunits = mnim.nim.subunits;
+	end
+
+	
 	
 	%%
 	function mnim = reg_path( mnim, Robs, stims, Uindx, XVindx, varargin )
@@ -236,6 +279,51 @@ methods
 		mod_internals.gain_funs = gmults;
 	end
 	
+	%% 
+	function mnim = init_nonpar_NLs( mnim, stims, varargin )
+	% Usage: mnim = mnim.init_nonpar_NLs( stims, varargin )
+	%
+	%  Initializes the specified model subunits to have nonparametric (tent-basis) upstream NLs,
+	%  inherited from NIM version. 
+	%
+	%  Note: default is initializes all subunits and Msubunits. Change this through optional flags
+	%
+	%  INPUTS: 
+	%			stims: cell array of stimuli
+	%     optional flags:
+	%        ('subs',sub_inds): Index values of set of subunits to make nonpar (default is all)
+	%        ('Msubs',sub_inds): Index values of set of Msubunits to make nonpar (default is all)
+	%        ('lambda_nld2',lambda_nld2): specify strength of smoothness regularization for the tent-basis coefs
+	%        ('NLmon',NLmon): Set to +1 to constrain NL coefs to be monotonic increasing and
+	%						 -1 to make monotonic decreasing. 0 means no constraint. Default here is +1 (monotonic increasing)
+	%				 ('edge_p',edge_p): Scalar that determines the locations of the outermost tent-bases 
+	%            relative to the underlying generating distribution
+	%        ('n_bfs',n_bfs): Number of tent-basis functions to use 
+	%        ('space_type',space_type): Use either 'equispace' for uniform bin spacing, or 'equipop' for 'equipopulated bins' 
+	%  	OUTPUTS: mnim: new mnim object
+
+		
+		% Initialize subunit NLs
+		[~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'Msubs'} );
+		mnim.nim = mnim.nim.init_nonpar_NLs( stims, modvarargin{:} );
+		
+		% Initialize Msubunit NLs
+		if isfield(parsed_options,'Msubs')
+			Msubs = parsed_options.Msubs;
+		else
+			Msubs = 1:length(mnim.Msubunits);
+		end
+		if ~isempty(Msubs)
+			[~,~,modvarargin] = NIM.parse_varargin( modvarargin, {'subs'} );
+			modvarargin{end+1} = 'subs';
+			modvarargin{end+1} = Msubs;
+			nimtmp = mnim.nim;
+			nimtmp.subunits = mnim.Msubunits;
+			nimtmp = nimtmp.init_nonpar_NLs( stims, modvarargin{:} );
+			mnim.Msubunits = nimtmp.subunits;
+		end	
+	end
+		
 	%%
 	function Msub = clone_to_Msubunit( mnim, subN, weight, filter_flip )
 	% Usage: Msub = mnim.clone_to_Msubunit( subN, <weight>, <filter_flip> )
@@ -299,7 +387,7 @@ methods
 		fgmult = mnim.calc_gmults(stims);
 		sub_outs = fgadd;
 		for nn = 1:length(mnim.Msubunits)
-			sub_outs(:,mnim.Mtargets(nn)) = fgadd(:,mnim.Mtargets(nn)) .* fgmult(nn);
+			sub_outs(:,mnim.Mtargets(nn)) = fgadd(:,mnim.Mtargets(nn)) .* fgmult(mnim.Mtargets(nn));
 		end
 	end
 
@@ -326,41 +414,6 @@ methods (Hidden)
 			end
 		end
 	end
-	
-	%%
-% 	function [Mtar,varargin] = extract_Mtargets( mnim, varargin)
-% 	% Usage: [Mtar,varargin] = extract_Mtargets( mnim, varargin)
-% 	%
-% 	% extract targets from varargin arguments and format into modvarargin
-% 
-% 		Mtar = 1:length(mnim.Msubunits);
-% 		varargin = {};
-% 
-% 		%if ~isempty(varargin) && iscell(varargin) && iscell(varargin{1})
-% 		%	varargin = varargin{1};
-% 		%end
-% 		if isempty(varargin)
-% 			return
-% 		end
-% 		
-% 		pos = 1; jj = 1;
-% 		if ~ischar(varargin{jj})  %if not a flag, it must be train_inds
-% 			modvarargin{pos} = varargin{jj};
-%       jj = jj + 1; pos = pos + 1;
-% 		end
-% 		while jj <= length(varargin)
-% 			switch varargin{jj}
-% 				case 'subs'
-% 					Mtar = varargin{jj+1};
-% 					jj = jj + 2;
-% 					assert( sum(Mtar > NMtar) == 0, 'Invalid multiplicative targets.' )
-% 				otherwise
-% 					modvarargin{pos} = varargin{jj};
-% 					pos = pos + 1;
-% 					jj = jj + 1;
-% 			end
-% 		end
-% 	end
 	
 	
 	%%
