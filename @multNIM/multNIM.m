@@ -1,16 +1,16 @@
 classdef multNIM
-	% Class implementation of multiplicative NIM based on NIM class. 
-	
-	properties
-		nim;		% NIM or sNIM struct that contains the normal subunits
-		Msubunits;  % actual NIM/sNIM subunits that should multiply Mtargets
-		Mtargets;   % targets of Msubunits in the NIM
-	end	
-	
-	properties (Hidden)
-		version = '0.3';    %source code version used to generate the model
-		create_on = date;    %date model was generated
-    end	
+% Class implementation of multiplicative NIM based on NIM class. 
+
+properties
+    nim;		% NIM or sNIM struct that contains the normal subunits
+    Msubunits;  % actual NIM/sNIM subunits that should multiply Mtargets
+    Mtargets;   % targets of Msubunits in the NIM
+end	
+
+properties (Hidden)
+    version = '0.3';    %source code version used to generate the model
+    create_on = date;    %date model was generated
+end	
 
 %% ********************  constructor ********************************
 methods
@@ -77,9 +77,10 @@ methods
     %varargin{end+1} = 'fit_offsets';
     %varargin{end+1} = 1;
 
+    % fit filters
     mnim_out = mnim;
     mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
-    
+        
     end
 	
 	function mnim_out = fit_Mfilters( mnim, Robs, stims, varargin )
@@ -139,6 +140,11 @@ methods
     mnim_out.Msubunits(Mtar) = nim_swap.subunits(1:NMsubs); % save mult subunits (not offset subunit)
     mnim_out.nim = nim_swap;                                % save upstream/spkNL params
     mnim_out.nim.subunits = mnim.nim.subunits;              % save add subunits
+    
+    % modify fit history
+    mnim_out.nim.fit_props.fit_type = 'Mfilt';
+    mnim_out.nim.fit_history(end).fit_type = 'Mfilt';
+    
     end
 
     function mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
@@ -258,6 +264,11 @@ methods
     mnim_out.Msubunits(Mtar) = nim_swap.subunits(1:NMsubs); % save mult subunits (not offset subunit)
     mnim_out.nim = nim_swap;                                % save upstream/spkNL params
     mnim_out.nim.subunits = mnim.nim.subunits;              % save add subunits
+    
+    % modify fit history
+    mnim_out.nim.fit_props.fit_type = 'Mupstream_NLs';
+    mnim_out.nim.fit_history(end).fit_type = 'Mupstream_NLs';
+    
     end
 		
 	function mnim_out = reg_pathA( mnim, Robs, stims, Uindx, XVindx, varargin )
@@ -312,6 +323,10 @@ methods
     mnim_out.Msubunits(Mtar) = nim_swap.subunits(1:NMsubs); % save mult subunits (not offset subunit)
     mnim_out.nim = nim_swap;                                % save upstream/spkNL params
     mnim_out.nim.subunits = mnim.nim.subunits;              % save add subunits
+    
+    % modify fit history
+    mnim_out.nim.fit_props.fit_type = 'Mfilt';
+    mnim_out.nim.fit_history(end).fit_type = 'Mfilt';
     end
 	    
     function mnim_out = fit_Msequential( mnim, Robs, stims, varargin )
@@ -431,11 +446,17 @@ methods
         for i = 1:Nfits
             modvarargin{end} = Mtar{i};
             mnim = mnim.fit_Mfilters(Robs,stims,modvarargin{:});
+            % modify fit history
+            mnim_out.nim.fit_props.fit_type = 'Mfilt';
+            mnim_out.nim.fit_history(end).fit_type = 'Mfilt';
         end
     elseif strcmp(component,'upstreamNLs')
         for i = 1:Nfits
             modvarargin{end} = Mtar{i};
             mnim = mnim.fit_MupstreamNLs(Robs,stims,modvarargin{:});
+            % modify fit history
+            mnim_out.nim.fit_props.fit_type = 'Mupstream_NLs';
+            mnim_out.nim.fit_history(end).fit_type = 'Mupstream_NLs';
         end
     end
     mnim_out = mnim;
