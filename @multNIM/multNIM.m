@@ -447,16 +447,16 @@ methods
             modvarargin{end} = Mtar{i};
             mnim = mnim.fit_Mfilters(Robs,stims,modvarargin{:});
             % modify fit history
-            mnim_out.nim.fit_props.fit_type = 'Mfilt';
-            mnim_out.nim.fit_history(end).fit_type = 'Mfilt';
+            mnim.nim.fit_props.fit_type = 'Mfilt';
+            mnim.nim.fit_history(end).fit_type = 'Mfilt';
         end
     elseif strcmp(component,'upstreamNLs')
         for i = 1:Nfits
             modvarargin{end} = Mtar{i};
             mnim = mnim.fit_MupstreamNLs(Robs,stims,modvarargin{:});
             % modify fit history
-            mnim_out.nim.fit_props.fit_type = 'Mupstream_NLs';
-            mnim_out.nim.fit_history(end).fit_type = 'Mupstream_NLs';
+            mnim.nim.fit_props.fit_type = 'Mupstream_NLs';
+            mnim.nim.fit_history(end).fit_type = 'Mupstream_NLs';
         end
     end
     mnim_out = mnim;
