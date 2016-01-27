@@ -148,33 +148,38 @@ methods
     end
 
     function mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
-	% Usage: mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
-    %
-    % 
+		% Usage: mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
+    %	
+    % use flag 'add_first' to fit Afilters before Mfilters
 		
     LLtol = 0.0002; MAXiter = 12;
 
     % Check to see if silent (for alt function)
-    [~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'silent'} );
+    [~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'silent','add_first'} );
     if isfield( parsed_options, 'silent' )
         silent = parsed_options.silent;
     else
         silent = 0;
-    end
-
+		end
+				
     modvarargin{end+1} = 'silent';
     modvarargin{end+1} = 1;
 
     LL = mnim.nim.fit_props.LL; LLpast = -1e10;
     if ~silent
         fprintf( 'Beginning LL = %f\n', LL )
-    end
+		end
+		
+		mnim_out = mnim;
+		if isfield( parsed_options, 'add_first')
+			mnim_out = mnim_out.fit_Afilters( Robs, stims, modvarargin{:} );
+		end
+
     iter = 1;
-    mnim_out = mnim;
     while (((LL-LLpast) > LLtol) && (iter < MAXiter))
 
-        mnim_out = mnim_out.fit_Afilters( Robs, stims, modvarargin{:} );
         mnim_out = mnim_out.fit_Msequential( Robs, stims, modvarargin{:} ); % defaults to fitting filts of all subunits specified in 'subs'; defaults to all
+        mnim_out = mnim_out.fit_Afilters( Robs, stims, modvarargin{:} );
 
 
         LLpast = LL;
@@ -406,7 +411,7 @@ methods
         Ncurr_Msubs = length(Mtar{i});
         Atargs = [];
         for j = 1:Ncurr_Msubs
-            curr_targs = cell2mat(mnim.Mtargets(Mtar{i})); 
+            curr_targs = cell2mat(mnim.Mtargets(Mtar{i}(j))); 
             Atargs = [Atargs; curr_targs(:)];
         end
         if length(Atargs)~=length(unique(Atargs))
@@ -463,7 +468,8 @@ methods
     end
     
 end
-%% ********************  helper methods ********************************
+
+%% ********************  Helper Methods ********************************
 methods
     
     function mnim = add_Msubunit( mnim, subunit, Mtargets )
@@ -633,7 +639,7 @@ methods
     nimtmp = mnim.nim;
     Nmods = length(nimtmp.subunits);
     fprintf( 'Regular Subunits: 1-%d\n   Mult Subunits: %d-%d\n', Nmods, Nmods+1, Nmods+length(mnim.Msubunits) )
-    nimtmp.subunits = cat(1,nimtmp.subunits, mnim.Msubunits );
+    nimtmp.subunits = cat(1,nimtmp.subunits(:), mnim.Msubunits(:) );
     if strcmp(class(nimtmp),'NIM')
         nimtmp.display_model_dab( Xstim, Robs );
     else
@@ -643,6 +649,7 @@ methods
     end
 
 end
+
 %% ********************  hidden methods ********************************
 methods (Hidden)
 	
