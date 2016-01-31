@@ -2,41 +2,40 @@ classdef multNIM
 % Class implementation of multiplicative NIM based on NIM class. 
 
 properties
-    nim;		% NIM or sNIM struct that contains the normal subunits
-    Msubunits;  % actual NIM/sNIM subunits that should multiply Mtargets
-    Mtargets;   % targets of Msubunits in the NIM
+	nim;		    % NIM or sNIM struct that contains the normal subunits
+	Msubunits;  % actual NIM/sNIM subunits that should multiply Mtargets
+	Mtargets;   % targets of Msubunits in the NIM
 end	
 
 properties (Hidden)
-    version = '0.3';    %source code version used to generate the model
-    create_on = date;    %date model was generated
+	version = '0.3';    %source code version used to generate the model
+	create_on = date;   %date model was generated
 end	
 
-%% ********************  constructor ********************************
+%% ******************** constructor ********************************
 methods
 
 	function mnim = multNIM( nim, Msubunits, Mtargets )
 	% Usage: mnim = multNIM( nim, <Msubunits, Mtargets> )
 	%
 	% INPUTS:
-    %   nim:        either an object of the NIM or sNIM class
-    %   Msubunits:  array of SUBUNIT objects that will act as multiplicative
-    %               gains on the subunits of the nim object
-    %   Mtargets:   array of integers if each subunit only targets a single
-    %               additive subunit, or a cell array, where each cell
-    %               contains the targets of the corresponding Msubunit
-    % 
-    % OUTPUTS:
-    %   mnim:       initialized multNIM object
+	%   nim:        either an object of the NIM or sNIM class
+	%   Msubunits:  array of SUBUNIT objects that will act as multiplicative
+	%               gains on the subunits of the nim object
+	%   Mtargets:   array of integers if each subunit only targets a single
+	%               additive subunit, or a cell array, where each cell
+	%               contains the targets of the corresponding Msubunit
+	% 
+	% OUTPUTS:
+	%   mnim:       initialized multNIM object
 	
-    % handle the no-input-argument case by returning a null model. This
-    % is important when initializing arrays of objects
-    if nargin == 0
-        return 
-    end
-    if nargin < 2
-        return
-    end
+		% Handle the no-input-argument case by returning a null model. This is important when initializing arrays of objects
+		if nargin == 0
+			return 
+		end
+		if nargin < 2
+			return
+		end
 
     % define defaults
     mnim.nim = nim;
@@ -81,12 +80,12 @@ methods
     mnim_out = mnim;
     mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
         
-    end
+	end
 	
 	function mnim_out = fit_Mfilters( mnim, Robs, stims, varargin )
 	% Usage: mnim_out = mnim.fit_Mfilters( Robs, stims, Uindx, varargin )
 	%
-    % Fits filters of multiplicative subunit
+	% Fits filters of multiplicative subunit
 	% Note 1: Specify which Msubunits to optimize using 'subs' option, 
     % numbered by their index in Msubunits array
     % Note 2: method only handles case where the Msubunits to optimize
@@ -145,29 +144,29 @@ methods
     mnim_out.nim.fit_props.fit_type = 'Mfilt';
     mnim_out.nim.fit_history(end).fit_type = 'Mfilt';
     
-    end
+	end
 
-    function mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
-		% Usage: mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
-    %	
-    % use flag 'add_first' to fit Afilters before Mfilters
+	function mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
+	%	
+	% use flag 'add_first' to fit Afilters before Mfilters
 		
-    LLtol = 0.0002; MAXiter = 12;
+		LLtol = 0.0002; MAXiter = 12;
 
-    % Check to see if silent (for alt function)
-    [~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'silent','add_first'} );
-    if isfield( parsed_options, 'silent' )
-        silent = parsed_options.silent;
-    else
-        silent = 0;
+		% Check to see if silent (for alt function)
+		[~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'silent','add_first'} );
+		if isfield( parsed_options, 'silent' )
+			silent = parsed_options.silent;
+		else
+			silent = 0;
 		end
 				
-    modvarargin{end+1} = 'silent';
-    modvarargin{end+1} = 1;
+		modvarargin{end+1} = 'silent';
+		modvarargin{end+1} = 1;
 
-    LL = mnim.nim.fit_props.LL; LLpast = -1e10;
-    if ~silent
-        fprintf( 'Beginning LL = %f\n', LL )
+		LL = mnim.nim.fit_props.LL; LLpast = -1e10;
+		if ~silent
+			fprintf( 'Beginning LL = %f\n', LL )
 		end
 		
 		mnim_out = mnim;
@@ -195,27 +194,27 @@ methods
 	function mnim_out = fit_AupstreamNLs( mnim, Robs, stims, varargin )
 	% Usage: mnim_out = mnim.fit_AupstreamNLs( Robs, stims, Uindx, varargin )
 	
-    % ensure proper format of stims cell array
-    if ~iscell(stims)
-        tmp = stims;
-        clear stims
-        stims{1} = tmp;
-    end
+		% Ensure proper format of stims cell array
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
 
-    % append necessary options to varargin to pass to fit_filters
+		% append necessary options to varargin to pass to fit_filters
     varargin{end+1} = 'gain_funs';
-    varargin{end+1} = mnim.calc_gmults( stims );
-    %varargin{end+1} = 'fit_offsets';
-    %varargin{end+1} = 1;
+		varargin{end+1} = mnim.calc_gmults( stims );
+		%varargin{end+1} = 'fit_offsets';
+		%varargin{end+1} = 1;
 
-    mnim_out = mnim;
-    mnim_out.nim = mnim.nim.fit_upstreamNLs( Robs, stims, varargin{:} );
-    end
+		mnim_out = mnim;
+		mnim_out.nim = mnim.nim.fit_upstreamNLs( Robs, stims, varargin{:} );  
+	end
 
  	function mnim_out = fit_MupstreamNLs( mnim, Robs, stims, varargin )
 	% Usage: mnim_out = mnim.fit_MupstreamNLs( Robs, stims, Uindx, varargin )
 	%
-    % Fits upstream nonlinearities of multiplicative subunits
+	% Fits upstream nonlinearities of multiplicative subunits
 	% Note 1: Specify which Msubunits to optimize using 'subs' option, 
     % numbered by their index in Msubunits array
     % Note 2: method only handles case where the Msubunits to optimize
@@ -332,50 +331,49 @@ methods
     % modify fit history
     mnim_out.nim.fit_props.fit_type = 'Mfilt';
     mnim_out.nim.fit_history(end).fit_type = 'Mfilt';
-    end
+	end
 	    
-    function mnim_out = fit_Msequential( mnim, Robs, stims, varargin )
-    % Usage: mnim_out = mnim.fit_Msequential( Robs, stims, Uindx, varargin )
+	function mnim_out = fit_Msequential( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = mnim.fit_Msequential( Robs, stims, Uindx, varargin )
+	% Fits filters or upstream nonlinearities of multiplicative subunit,
+	% and handles case where the Msubunits to optimize target the same 
+	% additive subunits
 	%
-    % Fits filters or upstream nonlinearities of multiplicative subunit,
-    % and handles case where the Msubunits to optimize target the same 
-    % additive subunits
 	% INPUTS:
-    %   Robs:
-    %   stim:
-    %   optional flags:
-    %       any optional flag argument used for fit_Mfilters method or fit_MupstreamNLs
-    %       ('subs',subs):  
-    %           option 1 - array of Msubunit indices indicating which
-    %               subunits to optimize. If all selected subunits act on
-    %               unique additive subunits, fit_Mfilters is called. If
-    %               not, the indices are arranged so that fit_Mfilters will
-    %               be called sequentially, and in the case of multiple 
-    %               Msubunits acting on the same additive subunit, the
-    %               Msubunit with the smallest index will by default be fit
-    %               first.
-    %           option 2 - Nx1 cell array of Msubunit indices indicating 
-    %               which Msubunits should be fit during N calls to
-    %               fit_Mfilters. Indices in each cell of the array will be
-    %               checked for uniqueness of targets; if nonuniqueness is
-    %               found, that cell is divided into one or more cells and
-    %               the rest of the fitting order will be unaffected.
-    %           option 3 - if subs is empty or 'subs' is not listed as an
-    %               optional flag, all Msubunits are selected and the
-    %               method defaults to the behavior in option 1
-    %       ('component','component'): string 'filt' or 'upstreamNLs'
-    %               specifying which component of the Msubunits to fit;
-    %               defaults to 'filt'
-    % 
-    % OUTPUTS:
-    %   mnim_out:   updated multNIM object
+	%   Robs:
+	%   stim:
+	%   optional flags:
+	%       any optional flag argument used for fit_Mfilters method or fit_MupstreamNLs
+	%       ('subs',subs):  
+	%           option 1 - array of Msubunit indices indicating which
+	%               subunits to optimize. If all selected subunits act on
+	%               unique additive subunits, fit_Mfilters is called. If
+	%               not, the indices are arranged so that fit_Mfilters will
+	%               be called sequentially, and in the case of multiple 
+	%               Msubunits acting on the same additive subunit, the
+	%               Msubunit with the smallest index will by default be fit first.
+	%           option 2 - Nx1 cell array of Msubunit indices indicating 
+	%               which Msubunits should be fit during N calls to
+	%               fit_Mfilters. Indices in each cell of the array will be
+	%               checked for uniqueness of targets; if nonuniqueness is
+	%               found, that cell is divided into one or more cells and
+	%               the rest of the fitting order will be unaffected.
+	%           option 3 - if subs is empty or 'subs' is not listed as an
+	%               optional flag, all Msubunits are selected and the
+	%               method defaults to the behavior in option 1
+	%       ('component','component'): string 'filt' or 'upstreamNLs'
+	%               specifying which component of the Msubunits to fit;
+	%               defaults to 'filt'
+	% 
+	% OUTPUTS:
+	%   mnim_out:   updated multNIM object
     
-    % ensure proper format of stims cell array
-    if ~iscell(stims)
-        tmp = stims;
-        clear stims
-        stims{1} = tmp;
-    end
+		% Ensure proper format of stims cell array
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
 
     % parse optional arguments, separating those needed in this method
     % from those needed as inputs to fit_filters method in NIM
@@ -465,30 +463,30 @@ methods
         end
     end
     mnim_out = mnim;
-    end
+	end
     
 end
 
 %% ********************  Helper Methods ********************************
 methods
     
-    function mnim = add_Msubunit( mnim, subunit, Mtargets )
+	function mnim = add_Msubunit( mnim, subunit, Mtargets )
 	% Usage: mnim = mnim.add_Msubunit( subunit, Mtargets )
 	%
 	% INPUTS:
 	%   subunit:    this can either be a subunit class to add to the NIM 
-    %               model, or a number of an existing subunit to clone for 
-    %               a multiplicative subunit 
+	%               model, or a number of an existing subunit to clone for 
+	%               a multiplicative subunit 
 	%   Mtargets:   array specifying subunits that new Msubunit multiplies
-    % 
-    % OUPUTS:
-    %   mnim:       updated multNIM object with new Msubunit
+	% 
+	% OUTPUTS:
+	%   mnim:       updated multNIM object with new Msubunit
 
-    % error checking on inputs
-    assert( all(Mtargets <= length(mnim.nim.subunits)), 'Mtargets must be existing subunits.' )
+		% Error checking on inputs
+		assert( all(Mtargets <= length(mnim.nim.subunits)), 'Mtargets must be existing subunits.' )
 
-    % check identity of subunit
-    if isa(subunit,'double') 
+		% check identity of subunit
+		if isa(subunit,'double') 
         % clone existing subunit from NIM
         assert( subunit <= length(mnim.nim.subunits), 'subunit to be multiplicative must be a normal subunit' )
         Msubunit = mnim.subunits(subunit);
@@ -500,89 +498,97 @@ methods
 
     mnim.Mtargets{end+1} = Mtargets;
     
-    end
+		end
     
-    function Msub = clone_to_Msubunit( mnim, subN, weight, filter_flip )
-	% Usage: Msub = mnim.clone_to_Msubunit( subN, <weight>, <filter_flip> )
-    % 
-    % uses an existing subunit of an NIM object as an Msubunit
-    % INPUTS:
-    %   subN:           index of NIM subunit to clone into an Msubunit
-    %   <weight>:       desired weight (+/-1) of new subunit
-    %   <filter_flip>:  if anything - literally anything - is in this
-    %                   input, we'll flip the filter's sign
-    %
-    % OUTPUTS:
-    %   Msub:           new subunit
+	function Msub = clone_to_Msubunit( mnim, subN, weight, filter_flip )
+	% Usage: Msub = mnim.clone_to_Msubunit( subN, <weight>, <filter_flip> ) 
+	% Uses an existing subunit of an NIM object as an Msubunit
+	%
+	% INPUTS:
+	%   subN:           index of NIM subunit to clone into an Msubunit
+	%   <weight>:       desired weight (+/-1) of new subunit
+	%   <filter_flip>:  if anything - literally anything - is in this
+	%                   input, we'll flip the filter's sign
+	% OUTPUTS:
+	%   Msub:           new subunit
 		
-    Nmods = length(mnim.nim.subunits);
-    assert( subN <= Nmods, 'Invalid subunit to clone.' )
+		Nmods = length(mnim.nim.subunits);
+		assert( subN <= Nmods, 'Invalid subunit to clone.' )
 
-    Msub = mnim.nim.subunits(subN);
-    if (nargin > 2) && ~isempty(weight)
-        Msub.weight = weight;
-    end
-    if nargin > 3
-        Msub.filtK = -Msub.filtK;
-        if isfield(Msub,'kt')
-            Msub.kt = -Msub.kt;
-        end
-    end
+		Msub = mnim.nim.subunits(subN);
+		if (nargin > 2) && ~isempty(weight)
+			Msub.weight = weight;
+		end
+		if nargin > 3
+			Msub.filtK = -Msub.filtK;
+			if isfield(Msub,'kt')  
+				Msub.kt = -Msub.kt;
+			end
+		end
 
-    % Should reset nonlinearity if parametric or nonparametric and normalize filter (output <1)
-    if strcmp( Msub.NLtype, 'nonpar' )
-        Msub.NLnonpar.TBy(:) = 0;
-    end		
-    
-    end
-    
+		% Should reset nonlinearity if parametric or nonparametric and normalize filter (output <1)
+		if strcmp( Msub.NLtype, 'nonpar' )
+			Msub.NLnonpar.TBy(:) = 0;
+		end		
+	end
+
 	function [LL, pred_rate, mod_internals, LL_data] = eval_model( mnim, Robs, stims, varargin )
-	%	Usage: [LL, pred_rate, mod_internals, LL_data] = eval_model( mnim, Robs, stims, varargin )
-		
-    varargin{end+1} = 'gain_funs';
-    gmults = mnim.calc_gmults( stims );
-    varargin{end+1} = gmults;
+	%	Usage: [LL, pred_rate, mod_internals, LL_data] = mnim.eval_model( Robs, stims, varargin )
+	%
+	% OUTPUT:
+	%   LL:
+	%   pred_rate:
+	%   mod_internals: struct with following information
+	%     gint ...
+	
+		varargin{end+1} = 'gain_funs';
+		gmults = mnim.calc_gmults( stims );
+		varargin{end+1} = gmults;
 
-    [LL,pred_rate,mod_internals,LL_data] = mnim.nim.eval_model( Robs, stims, varargin{:} );
-    mod_internals.gain_funs = gmults;
+		[LL,pred_rate,mod_internals,LL_data] = mnim.nim.eval_model( Robs, stims, varargin{:} );
+		mod_internals.gain_funs = gmults;
+		
+		% Multiplicative subunit output information
+		nimtmp = mnim.nim;
+		nimtmp.subunits = mnim.Msubunits;
+		[~,~,Mmod_internals] = nimtmp.eval_model( Robs, stims );
+		mod_internals.M_gint = Mmod_internals.gint;
+		mod_internals.M_fgint = Mmod_internals.fgint;
+		
+	end
     
-    end
-    
-    function [sub_outs,fg_add,gmults] = get_subunit_outputs( mnim, stims )
+	function [sub_outs,fg_add,gmults] = get_subunit_outputs( mnim, stims )
 	% Usage: [sub_outs,fg_add,fg_mult] = mnim.get_subunit_outputs( stims )
 	% 
-	% Calculates output of all subunits (additive and multiplicative) and 
-    % separates additive and multiplicative components
-    % INPUTS:
-    %   stims:      cell array of stim matrices for mnim model
-    % 
-    % OUTPUTS:
-    %   sub_outs:   T x num_add_subunits matrix of additive subunit outputs
-    %               multiplied by their corresponding gain functions
-    %   fg_add:     T x num_add_subunits matrix of additive subunit outputs
-    %   fg_mult:    T x num_add_subunits matrix of gmults from Msubunit outputs
+	% Calculates output of all subunits (additive and multiplicative) and separates additive and multiplicative components
+	% INPUTS:
+	%   stims:      cell array of stim matrices for mnim model
+	% 
+	% OUTPUTS:
+	%   sub_outs:   T x num_add_subunits matrix of additive subunit outputs
+	%               multiplied by their corresponding gain functions
+	%   fg_add:     T x num_add_subunits matrix of additive subunit outputs
+	%   fg_mult:    T x num_add_subunits matrix of gmults from Msubunit outputs
 	
-    % get additive subunit outputs
-    [~,~,mod_internals] = mnim.nim.eval_model( [], stims );
-    fg_add = mod_internals.fgint;
+		% Get additive subunit outputs
+		[~,~,mod_internals] = mnim.nim.eval_model( [], stims );
+		fg_add = mod_internals.fgint;
 
-    % multiply by excitatory and inhibitory weights
-    for nn = 1:length(mnim.nim.subunits)
-        fg_add(:,nn) = fg_add(:,nn) * mnim.nim.subunits(nn).weight;
-    end
-
-    % calculate multiplicative effect
-    gmults = mnim.calc_gmults(stims);  % T x num_add_subunits; corresponds to fg_add, contain 1+f()
-    sub_outs = fg_add;                 % default value is additive subunit output
-    for nn = 1:length(mnim.Msubunits)
-       sub_outs(:,mnim.Mtargets{nn}) = fg_add(:,mnim.Mtargets{nn}) .* gmults(:,mnim.Mtargets{nn}); 
-    end
-    
-    end
+		% Multiply by excitatory and inhibitory weights
+		for nn = 1:length(mnim.nim.subunits)
+			fg_add(:,nn) = fg_add(:,nn) * mnim.nim.subunits(nn).weight;
+		end
+	
+		% Calculate multiplicative effect
+		gmults = mnim.calc_gmults(stims);  % T x num_add_subunits; corresponds to fg_add, contain 1+f()  
+		sub_outs = fg_add;                 % default value is additive subunit output
+		for nn = 1:length(mnim.Msubunits)
+			sub_outs(:,mnim.Mtargets{nn}) = fg_add(:,mnim.Mtargets{nn}) .* gmults(:,mnim.Mtargets{nn}); 
+		end
+	end
  		
 	function mnim = init_nonpar_NLs( mnim, stims, varargin )
 	% Usage: mnim = mnim.init_nonpar_NLs( stims, varargin )
-	%
 	% Initializes the specified model subunits to have nonparametric (tent-basis) upstream NLs,
 	% inherited from NIM version. 
 	%
@@ -600,20 +606,19 @@ methods
 	%                       relative to the underlying generating distribution
 	%       ('n_bfs',n_bfs): Number of tent-basis functions to use 
 	%       ('space_type',space_type): Use either 'equispace' for uniform bin spacing, or 'equipop' for 'equipopulated bins' 
-    %
 	% OUTPUTS: 
-    %   mnim: new mnim object
+	%   mnim: new mnim object
 		
-    % Initialize subunit NLs
-    [~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'Msubs'} );
-    mnim.nim = mnim.nim.init_nonpar_NLs( stims, modvarargin{:} );
+		% Initialize subunit NLs
+		[~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'Msubs'} );
+		mnim.nim = mnim.nim.init_nonpar_NLs( stims, modvarargin{:} );
 
-    % Initialize Msubunit NLs
-    if isfield(parsed_options,'Msubs')
-        Msubs = parsed_options.Msubs;
-    else
-        Msubs = 1:length(mnim.Msubunits);
-    end
+		% Initialize Msubunit NLs
+		if isfield(parsed_options,'Msubs') 
+			Msubs = parsed_options.Msubs;
+		else
+			Msubs = 1:length(mnim.Msubunits);
+		end
     if ~isempty(Msubs)
         [~,~,modvarargin] = NIM.parse_varargin( modvarargin, {'subs'} );
         modvarargin{end+1} = 'subs';
@@ -624,29 +629,99 @@ methods
         mnim.Msubunits = nimtmp.subunits;
     end	
     
-    end
-	
-	function display_model( mnim, Xstim, Robs )
-	% Usage: display_model( mnim, Xstim, Robs )
+	end
 		
-    if nargin < 2
-        Xstim = [];
-    end
-    if nargin < 3
-        Robs = [];
-    end
+	function display_model( mnim, stims, Robs )
+	% Usage: [] = mnim.display_model( Xstim, Robs )
+	% Model display function that plots additive subunits in left column and multiplicative in right column
+	% Tis a simple display, and could be elaborated...
+	
+		if nargin < 3, Robs = [];	end
+		if nargin < 2
+			mod_outs = [];
+		else
+			[~,~,mod_outs] = mnim.eval_model( Robs, stims );
+		end
+		
+		extra_plots = [(mnim.nim.spk_hist.spkhstlen > 0) ~isempty(mod_outs)]; % will be spike-history or spkNL plot?
 
-    nimtmp = mnim.nim;
-    Nmods = length(nimtmp.subunits);
-    fprintf( 'Regular Subunits: 1-%d\n   Mult Subunits: %d-%d\n', Nmods, Nmods+1, Nmods+length(mnim.Msubunits) )
-    nimtmp.subunits = cat(1,nimtmp.subunits(:), mnim.Msubunits(:) );
-    if strcmp(class(nimtmp),'NIM')
-        nimtmp.display_model_dab( Xstim, Robs );
-    else
-        nimtmp.display_model( Xstim, Robs );
-    end
-    
-    end
+		NAmods = length(mnim.nim.subunits);
+		NMmods = length(mnim.Msubunits);
+		
+		Nrows = max([NAmods NMmods]);
+		if sum(extra_plots) == 0
+			Ncols = 6;
+		else
+			% Then need extra column (and possibly extra row)
+			Nrows = max([Nrows sum(extra_plots)]);
+			Ncols = 7;
+		end
+
+		% Plot Additive subunits
+		for nn = 1:NAmods
+			dims = mnim.nim.stim_params(mnim.nim.subunits(nn).Xtarg).dims;
+			mnim.nim.subunits(nn).display_filter( dims, [Nrows Ncols (nn-1)*Ncols+1], 'notitle', 1 );
+			subplot( Nrows, Ncols, (nn-1)*Ncols+3 )
+			if isempty(mod_outs)
+				mnim.nim.subunits(nn).display_NL();
+			else
+				mnim.nim.subunits(nn).display_NL( mod_outs.gint(:,nn) );
+			end
+			subplot( Nrows, Ncols, (nn-1)*Ncols+1 )
+			if mnim.nim.subunits(nn).weight > 0
+				title( sprintf( 'Exc #%d', nn ) )
+			else
+				title( sprintf( 'Sup #%d', nn ) )
+			end
+		end
+
+		% Plot Mult subunits
+		for nn = 1:NMmods
+			dims = mnim.nim.stim_params(mnim.nim.subunits(nn).Xtarg).dims;
+			mnim.Msubunits(nn).display_filter( dims, [Nrows Ncols (nn-1)*Ncols+4], 'notitle', 1 );
+			subplot( Nrows, Ncols, (nn-1)*Ncols+6 )
+			if isempty(mod_outs)
+				mnim.Msubunits(nn).display_NL( 'y_offset',1.0 );
+			else
+				mnim.Msubunits(nn).display_NL( mod_outs.M_gint(:,nn), 'y_offset',1.0 );
+			end
+			subplot( Nrows, Ncols, (nn-1)*Ncols+4 )
+			title( sprintf( 'Mult #%d -> %d', nn, mnim.Mtargets{nn}(1) ) )  % at the moment only displays first Mtarget
+		end
+
+		% Plot spkNL
+		if sum(extra_plots) == 0
+			return
+		end
+		subplot( Nrows, Ncols, Ncols );
+		if extra_plots(2) > 0
+			mnim.nim.display_spkNL( mod_outs.G );
+			title( 'Spk NL' )
+			if extra_plots(1) > 0
+				subplot( Nrows, Ncols, 2*Ncols );
+			end
+		end
+		if extra_plots(1) > 0
+			mnim.nim.display_spike_history();
+		end
+	end
+	
+	function display_model_old( mnim, Xstim, Robs )
+	% Usage: [] = mnim.display_model( Xstim, Robs )
+		  
+		if nargin < 2, Xstim = []; end
+		if nargin < 3, Robs = []; end
+	
+		nimtmp = mnim.nim;
+		Nmods = length(nimtmp.subunits);
+		fprintf( 'Regular Subunits: 1-%d\n   Mult Subunits: %d-%d\n', Nmods, Nmods+1, Nmods+length(mnim.Msubunits) )
+		nimtmp.subunits = cat(1,nimtmp.subunits(:), mnim.Msubunits(:) );
+		if strcmp(class(nimtmp),'NIM')
+			nimtmp.display_model_dab( Xstim, Robs );
+		else
+			nimtmp.display_model( Xstim, Robs );  
+		end    
+	end
 
 end
 
@@ -655,95 +730,86 @@ methods (Hidden)
 	
 	function [gmults, fg_mult] = calc_gmults( mnim, stims )
 	% Usage: gmults = mnim.calc_gmults( stims )
-    %
-    % Hidden method used to calculate gains that will then be passed to an
-    % NIM fitting method or eval method
-    % INPUTS:
-    %   stims:      cell array of stim matrices for model fitting
-    % 
-    % OUTPUTS:
-    %   gmults:     T x num_add_units matrix of gmults, one for each
-    %               additive subunit in mnim.nim NIM object
-    %   fg_mults:   T x num_mult_units matrix of multiplicative subunit
-    %               outputs (includes weights)
+	% Hidden method used to calculate gains that will then be passed to an NIM fitting method or eval method
+	% 
+	% INPUTS:
+	%   stims:      cell array of stim matrices for model fitting
+	% OUTPUTS:
+	%   gmults:     T x num_add_units matrix of gmults, one for each additive subunit in mnim.nim NIM object
+	%   fg_mults:   T x num_mult_units matrix of multiplicative subunit outputs (includes weights)
 			
-    % set default gmults
-    [~,~,mod_int_add] = mnim.nim.eval_model( [], stims ); % cheap way to get size of gmults for diff nim classes
-    gmults = ones(size(mod_int_add.gint));  % default gains of 1 for every subunit 
+		% set default gmults
+		[~,~,mod_int_add] = mnim.nim.eval_model( [], stims ); % cheap way to get size of gmults for diff nim classes
+		gmults = ones(size(mod_int_add.gint));  % default gains of 1 for every subunit 
 
-    % change defaults
-    if ~isempty(mnim.Msubunits)
-        % create standard NIM model whose subunits come from Msubunits
-        % for easy evaluation of subunit outputs
-        nimtmp = mnim.nim;
-        nimtmp.subunits = mnim.Msubunits;
-        [~,~,mod_int_mult] = nimtmp.eval_model( [], stims );
-        fg_mult = mod_int_mult.fgint;
-        % only change gmults for additive subunits targeted by Msubunits
-        for nn = 1:length(mnim.Msubunits)
-            % multiply existing gmults of targets by output of selected subunit
-            targets = mnim.Mtargets{nn};
-            weight = mnim.Msubunits(nn).weight;
-            fg_mult(:,nn) = weight*fg_mult(:,nn);
-            gmults(:,targets) = gmults(:,targets).*repmat(1+fg_mult(:,nn),1,length(targets));
-        end
-    end
-    end
+		% change defaults
+		if ~isempty(mnim.Msubunits)
+			% create standard NIM model whose subunits come from Msubunits for easy evaluation of subunit outputs
+			nimtmp = mnim.nim;
+			nimtmp.subunits = mnim.Msubunits;
+			[~,~,mod_int_mult] = nimtmp.eval_model( [], stims );
+			fg_mult = mod_int_mult.fgint;
+			% only change gmults for additive subunits targeted by Msubunits
+			for nn = 1:length(mnim.Msubunits)
+				% multiply existing gmults of targets by output of selected subunit
+				targets = mnim.Mtargets{nn};
+				weight = mnim.Msubunits(nn).weight;
+				fg_mult(:,nn) = weight*fg_mult(:,nn);
+				gmults(:,targets) = gmults(:,targets).*repmat(1+fg_mult(:,nn),1,length(targets));
+			end
+		end	
+	end
 	
 	function [nim,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtargs )
 	% Usage: [nim,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtargs )
 	% 
 	% setup for fitting multiplicative subunits as NIM additive units with 
-    % gmults taking care of outputs from original additive subunits 
-    % original multiplicative subunits that are not being fit. Also outputs
-    % proper stim cell array.
-    % Note: method is called from fit_Mfilters, so no two multiplicative 
-    % subunits specified by Mtargets should have the same additive subunit
-    % as a target (though a given Mtarget can have multiple additive
-    % subunits as targets)
-    % INPUTS:
-    %   mnim:       multNIM object whose multiplicative subunits are being
-    %               fit
-    %   stims:      cell array of stim matrices for original additive and
-    %               multiplicative subunits
-    %   Mtargs:     array of indices specifying which multiplicative
-    %               subunits are to be fit
-    %
-    % OUTPUTS:
-    %   nim:        updated NIM object that contains subunits to be fit
-    %   gmults:     T x num(Mtargets) matrix of gmult values obtained from
-    %               original subunits and nontarget multiplicative subunits
-    %   stims_plus: same cell array as stims with an additional stim matrix
-    %               to properly take into account offsets due to shuffling
-    %               around model terms
+	% gmults taking care of outputs from original additive subunits 
+	% original multiplicative subunits that are not being fit. Also outputs
+	% proper stim cell array.
+	% Note: method is called from fit_Mfilters, so no two multiplicative 
+	% subunits specified by Mtargets should have the same additive subunit
+	% as a target (though a given Mtarget can have multiple additive subunits as targets)
+	%
+	% INPUTS:
+	%   mnim:       multNIM object whose multiplicative subunits are being fit
+	%   stims:      cell array of stim matrices for original additive and
+	%               multiplicative subunits
+	%   Mtargs:     array of indices specifying which multiplicative
+	%               subunits are to be fit
+	% OUTPUTS:
+	%   nim:        updated NIM object that contains subunits to be fit
+	%   gmults:     T x num(Mtargets) matrix of gmult values obtained from
+	%               original subunits and nontarget multiplicative subunits
+	%   stims_plus: same cell array as stims with an additional stim matrix
+	%               to properly take into account offsets due to shuffling around model terms
 	
-    Mnontargs = setdiff(1:length(mnim.Msubunits),Mtargs); % list of nontargeted mult subunits
+		Mnontargs = setdiff(1:length(mnim.Msubunits),Mtargs); % list of nontargeted mult subunits
 
-    % ensure proper format of stims cell array
-    if ~iscell(stims)
-        stims_plus{1} = stims;
-    else
-        stims_plus = stims;
-    end
+		% Ensure proper format of stims cell array
+		if ~iscell(stims)
+			stims_plus{1} = stims;
+		else
+			stims_plus = stims;
+		end
 
-    % Extract relevant outputs from add and mult subunits
-    [~,fg_add] = mnim.get_subunit_outputs( stims_plus ); % fg_add incorporates weight
-    [~,fg_mult] = mnim.calc_gmults( stims_plus );        % fg_mult incorporates weight
+		% Extract relevant outputs from add and mult subunits
+		[~,fg_add] = mnim.get_subunit_outputs( stims_plus ); % fg_add incorporates weight
+		[~,fg_mult] = mnim.calc_gmults( stims_plus );        % fg_mult incorporates weight
 
-    % multiply output of additive subunits and non-target mult subunits
-    g = fg_add;
-    for i = Mnontargs
-        targs = mnim.Mtargets{i};
-        g(:,targs) = g(:,targs).*repmat((1+fg_mult(:,i)),1,length(targs));
-    end
+		% Multiply output of additive subunits and non-target mult subunits
+		g = fg_add;
+		for i = Mnontargs
+			targs = mnim.Mtargets{i};
+			g(:,targs) = g(:,targs).*repmat((1+fg_mult(:,i)),1,length(targs));
+		end
 
-    % now each Mtarg should be multiplied by the g's corresponding to its
-    % targets
-    NMsubs = length(Mtargs);
-    gmults = ones(size(g,1),NMsubs+1);  % extra-dim of ones is to multiply additive offset term
-    for i = 1:length(Mtargs)
-        gmults(:,i) = sum(g(:,mnim.Mtargets{Mtargs(i)}),2);
-    end
+		% Now each Mtarg should be multiplied by the g's corresponding to its targets
+		NMsubs = length(Mtargs);
+		gmults = ones(size(g,1),NMsubs+1);  % extra-dim of ones is to multiply additive offset term
+		for i = 1:length(Mtargs)
+			gmults(:,i) = sum(g(:,mnim.Mtargets{Mtargs(i)}),2);
+		end
     % gmults for the offset is given by sum of all g's, since those
     % associated with targets being fit have a +1 and those not still
     % need to be included
