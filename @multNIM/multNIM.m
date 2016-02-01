@@ -657,6 +657,7 @@ methods
 			Ncols = 7;
 		end
 
+		figure
 		% Plot Additive subunits
 		for nn = 1:NAmods
 			dims = mnim.nim.stim_params(mnim.nim.subunits(nn).Xtarg).dims;
@@ -681,9 +682,9 @@ methods
 			mnim.Msubunits(nn).display_filter( dims, [Nrows Ncols (nn-1)*Ncols+4], 'notitle', 1 );
 			subplot( Nrows, Ncols, (nn-1)*Ncols+6 )
 			if isempty(mod_outs)
-				mnim.Msubunits(nn).display_NL( 'y_offset',1.0 );
+				mnim.Msubunits(nn).display_NL( 'y_offset',1.0,'sign',1 );
 			else
-				mnim.Msubunits(nn).display_NL( mod_outs.M_gint(:,nn), 'y_offset',1.0 );
+				mnim.Msubunits(nn).display_NL( mod_outs.M_gint(:,nn), 'y_offset',1.0,'sign',1 );
 			end
 			subplot( Nrows, Ncols, (nn-1)*Ncols+4 )
 			title( sprintf( 'Mult #%d -> %d', nn, mnim.Mtargets{nn}(1) ) )  % at the moment only displays first Mtarget
