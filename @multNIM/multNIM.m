@@ -30,56 +30,50 @@ methods
 	%   mnim:       initialized multNIM object
 	
 		% Handle the no-input-argument case by returning a null model. This is important when initializing arrays of objects
-		if nargin == 0
-			return 
-		end
-		if nargin < 2
+		if nargin < 1
 			return
 		end
 
-    % define defaults
-    mnim.nim = nim;
-    mnim.Msubunits = [];
-    mnim.Mtargets = [];
+		% Define defaults
+		mnim.nim = nim;
+		mnim.Msubunits = [];
+		mnim.Mtargets = [];
 
-    % turn Mtargets into a cell array if not already
-    if ~iscell(Mtargets)
-        Mtargets = num2cell(Mtargets);
-    end
+		% Turn Mtargets into a cell array if not already
+		if ~iscell(Mtargets)
+			Mtargets = num2cell(Mtargets);
+		end
 
-    % error checking on inputs
-    assert( nargin == 3, 'Must specify targets as well as subunits' )
-    assert( all(cellfun(@(x) ismember(x,1:length(nim.subunits)),Mtargets)), 'Invalid Mtargets.' )
-    mnim.Msubunits = Msubunits;
-    mnim.Mtargets = Mtargets;
-    end
-
+		% Error checking on inputs
+		assert( nargin == 3, 'Must specify targets as well as subunits' )
+		assert( all(cellfun(@(x) ismember(x,1:length(nim.subunits)),Mtargets)), 'Invalid Mtargets.' )
+		mnim.Msubunits = Msubunits;
+		mnim.Mtargets = Mtargets;
+	end
+	
 end
-%% ********************  fitting methods ********************************
+
+%% ******************** Fitting methods ********************************
 methods
 	
 	function mnim_out = fit_Afilters( mnim, Robs, stims, varargin )
 	% Usage: mnim = mnim.fit_Afilters( Robs, stims, Uindx, varargin )
-	%
-    % Fits filters of additive subunits
+	% Fits filters of additive subunits
     
-    % ensure proper format of stims cell array
-    if ~iscell(stims)
-        tmp = stims;
-        clear stims
-        stims{1} = tmp;
-    end
+		% Ensure proper format of stims cell array
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
 
-    % append necessary options to varargin to pass to fit_filters
-    varargin{end+1} = 'gain_funs';
-    varargin{end+1} = mnim.calc_gmults( stims );
-    %varargin{end+1} = 'fit_offsets';
-    %varargin{end+1} = 1;
+		% Append necessary options to varargin to pass to fit_filters
+		varargin{end+1} = 'gain_funs';
+		varargin{end+1} = mnim.calc_gmults( stims );
 
-    % fit filters
-    mnim_out = mnim;
-    mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );
-        
+		% Fit filters
+		mnim_out = mnim;
+		mnim_out.nim = mnim.nim.fit_filters( Robs, stims, varargin{:} );    
 	end
 	
 	function mnim_out = fit_Mfilters( mnim, Robs, stims, varargin )
