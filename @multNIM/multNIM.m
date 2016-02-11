@@ -5,6 +5,7 @@ properties
 	nim;		    % NIM or sNIM struct that contains the normal subunits
 	Msubunits;  % actual NIM/sNIM subunits that should multiply Mtargets
 	Mtargets;   % targets of Msubunits in the NIM
+	Mweights;	% weights on the output of the Msubunits
 end	
 
 properties (Hidden)
@@ -15,8 +16,8 @@ end
 %% ******************** constructor ********************************
 methods
 
-	function mnim = multNIM( nim, Msubunits, Mtargets )
-	% Usage: mnim = multNIM( nim, <Msubunits, Mtargets> )
+	function mnim = multNIM( nim, Msubunits, Mtargets, Mweights )
+	% Usage: mnim = multNIM( nim, <Msubunits, Mtargets, Mweights> )
 	%
 	% INPUTS:
 	%   nim:        either an object of the NIM or sNIM class
@@ -25,7 +26,10 @@ methods
 	%   Mtargets:   array of integers if each subunit only targets a single
 	%               additive subunit, or a cell array, where each cell
 	%               contains the targets of the corresponding Msubunit
-	% 
+	%	Mweights:	cell array where each cell contains the weights that
+	%				multiply the output of the Msubunit before adding 1;
+	%				one weight for each target of the subunit
+	%
 	% OUTPUTS:
 	%   mnim:       initialized multNIM object
 	
@@ -37,7 +41,8 @@ methods
 		% Define defaults
 		mnim.nim = nim;
 		mnim.Msubunits = [];
-		mnim.Mtargets = [];
+		mnim.Mtargets = {};
+		mnim.Mweights = {};
 
 		% Turn Mtargets into a cell array if not already
 		if ~iscell(Mtargets)
@@ -45,10 +50,21 @@ methods
 		end
 
 		% Error checking on inputs
-		assert( nargin == 3, 'Must specify targets as well as subunits' )
+		assert( nargin >= 3, 'Must specify targets as well as subunits' )
 		assert( all(cellfun(@(x) ismember(x,1:length(nim.subunits)),Mtargets)), 'Invalid Mtargets.' )
 		mnim.Msubunits = Msubunits;
 		mnim.Mtargets = Mtargets;
+		if nargin == 4
+			for i = 1:length(Msubunits)
+				assert( length(Mtargets{i}) == length(Mweights{i}));	% make sure number of targets == number of weights
+			end
+		else
+			for i = 1:length(Msubunits)
+				Mweights{i} = ones(length(Mtargets{i}),1);				% default to weights of 1
+			end
+		end
+		mnim.Mweights = Mweights;
+
 	end
 	
 end
@@ -109,7 +125,8 @@ methods
 			Atargs = [Atargs; temp_targs(:)];
 		end
 		assert(length(Atargs)==length(unique(Atargs)),'Cannot simultaneously fit two mult subunits with same target; use fit_Msequential method')
-
+		% add call to fit_Msequential here?
+		
 		% Swap roles of additive and multiplicative subunits
 		[nim_swap,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtar );
 
@@ -140,9 +157,9 @@ methods
 		mnim_out = mnim.fit_Afilters( Robs, stims, varargin{:} );
 	end
 	
-	function mnim_out = fit_weights( mnim, Robs, stims, varargin )
-	% Usage: mnim_out = mnim.fit_weights( Robs, stims, varargin )
-	% Fits weights on additive subunits (given fixed multiplicative modulation), which manifest as 
+	function mnim_out = fit_Aweights( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = mnim.fit_Aweights( Robs, stims, varargin )
+	% Fits weights on additive subunits (given fixed multiplicative modulation)
 
 		varargin{end+1} = 'gain_funs';
 		gmults = mnim.calc_gmults( stims );
@@ -150,6 +167,99 @@ methods
 
 		mnim_out = mnim;
 		mnim_out.nim = mnim.nim.fit_weights( Robs, stims, varargin{:} );
+	end
+	
+	function mnim_out = fit_Mweights( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = mnim.fit_Mweights( Robs, stims, Uindx, varargin )
+	%
+	% Fits weights w_{ij} of multiplicative subunit i on additive subunit
+	% j, such that the gain signal acting on additive subunit j is 
+	% (1 + w_{i,j}*(output of mult subunit i)
+	%
+	% Note 1: Specify which Msubunit weights to optimize using 'subs' option, 
+	%	numbered by their index in Msubunits array
+	% Note 2: Specify which weights from the chosen Msubunits to fit using the 
+	%	'weight_targs' option, which should be a cell array whose ith cell
+	%	contains a subset of Mtargets belonging to the corresponding
+	%	Msubunit in the 'subs' array
+	% Note 3: method only handles case where at most one weight per
+	%	additive subunit is fit. In the event that more than one weight is
+	%	specified the method will exit with an error message.
+	
+		% Ensure proper format of stims cell array
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
+
+		% Parse optional arguments, separating those needed in this method from those needed as inputs to fit_filters method in NIM
+		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs','weight_targs'} );
+		
+		% Save indices of mult subunits targeted for fitting
+		if isfield( parsed_inputs, 'subs' ) 
+			Mtar = parsed_inputs.subs;
+		else
+			Mtar = 1:length( mnim.Msubunits );
+		end
+		assert(all(ismember(Mtar,1:length(mnim.Msubunits))),'Invalid ''subs'' input')
+		NMsubs = length(Mtar);
+
+		% Save indices of mult subunits targeted for fitting
+		if isfield( parsed_inputs, 'weight_targs' ) 
+			Atar = parsed_inputs.weight_targs;
+		else
+			% default is all targets of each Mtar
+			Atar = cell(1,NMsubs);
+			for i = 1:NMsubs
+				Atar{i} = mnim.Mtargets{Mtar(i)};
+			end
+		end
+		
+		% Ensure multiple weights are not being fit on a single additive
+		% subunit
+		Atargs = [];
+		for i = 1:NMsubs
+			temp_targs = Atar{i};
+			Atargs = [Atargs; temp_targs(:)];
+		end
+		assert(length(Atargs)==length(unique(Atargs)),'Cannot simultaneously fit two weights acting on same additive subunit')
+
+		% Swap roles of additive and multiplicative subunits
+		[nim_swap,gmults,stims_plus] = format4Mweightfitting( mnim, stims, Mtar, Atar );
+
+		% Append necessary options to varargin to pass to fit_filters
+		modvarargin{end+1} = 'gain_funs';
+		modvarargin{end+1} = gmults;
+		modvarargin{end+1} = 'subs';
+		modvarargin{end+1} = 1:NMsubs;
+
+		% Fit filters using NIM method
+		nim_swap = nim_swap.fit_filters( Robs, stims_plus, modvarargin{:} );
+
+		% Copy filters back to their locations
+		mnim_out = mnim;
+		% Msubunits have not changed
+		mnim_out.nim = nim_swap;                                % to save upstream/spkNL params
+		mnim_out.nim.subunits = mnim.nim.subunits;              % to save add subunits
+		
+		% update Mweights, which are found in nim_swap filter
+		beg_indx = 0;
+		for i = 1:NMsubs
+			mnim_out.Mweights{Mtar(i)}(Atar{i}) = nim_swap.subunits(1).filtK(beg_indx+(1:length(Atar{i})));
+			beg_indx = beg_indx+length(Atar{i});
+		end
+    
+		% Modify fit history
+		mnim_out.nim.fit_props.fit_type = 'Mweight';
+		mnim_out.nim.fit_history(end).fit_type = 'Mweight';
+    
+	end
+	
+	function mnim_out = fit_weights( mnim, Robs, stims, varargin )
+	% Use either fit_Aweights or fit_Mweights/fit_Msequential (or fit_alt_filters)
+		warning( 'Use either multNIM.fit_Aweights or fit_Mweights/fit_Msequential (or fit_alt_filters). Defaulting to fit_Aweights.' )
+		mnim_out = mnim.fit_Aweights( Robs, stims, varargin{:} );
 	end
 	
 	function mnim_out = fit_alt_filters( mnim, Robs, stims, varargin )
@@ -207,7 +317,7 @@ methods
 		end
 
 		% append necessary options to varargin to pass to fit_filters
-    varargin{end+1} = 'gain_funs';
+		varargin{end+1} = 'gain_funs';
 		varargin{end+1} = mnim.calc_gmults( stims );
 		%varargin{end+1} = 'fit_offsets';
 		%varargin{end+1} = 1;
@@ -443,27 +553,27 @@ methods
 			Nfits = length(Mtar); % update Nfits   
 		end
 
-    % Fit model components; change 'subs' option on each iteration
-    modvarargin{end+1} = 'subs'; % 'subs' option removed by parse_varargin
-    modvarargin{end+1} = [];
-    if strcmp(component,'filt')
-        for i = 1:Nfits
-            modvarargin{end} = Mtar{i};
-            mnim = mnim.fit_Mfilters(Robs,stims,modvarargin{:});
-            % modify fit history
-            mnim.nim.fit_props.fit_type = 'Mfilt';
-            mnim.nim.fit_history(end).fit_type = 'Mfilt';
-        end
-    elseif strcmp(component,'upstreamNLs')
-        for i = 1:Nfits
-            modvarargin{end} = Mtar{i};
-            mnim = mnim.fit_MupstreamNLs(Robs,stims,modvarargin{:});
-            % modify fit history
-            mnim.nim.fit_props.fit_type = 'Mupstream_NLs';
-            mnim.nim.fit_history(end).fit_type = 'Mupstream_NLs';
-        end
-    end
-    mnim_out = mnim;
+		% Fit model components; change 'subs' option on each iteration
+		modvarargin{end+1} = 'subs'; % 'subs' option removed by parse_varargin
+		modvarargin{end+1} = [];
+		if strcmp(component,'filt')
+			for i = 1:Nfits
+				modvarargin{end} = Mtar{i};
+				mnim = mnim.fit_Mfilters(Robs,stims,modvarargin{:});
+				% modify fit history
+				mnim.nim.fit_props.fit_type = 'Mfilt';
+				mnim.nim.fit_history(end).fit_type = 'Mfilt';
+			end
+		elseif strcmp(component,'upstreamNLs')
+			for i = 1:Nfits
+				modvarargin{end} = Mtar{i};
+				mnim = mnim.fit_MupstreamNLs(Robs,stims,modvarargin{:});
+				% modify fit history
+				mnim.nim.fit_props.fit_type = 'Mupstream_NLs';
+				mnim.nim.fit_history(end).fit_type = 'Mupstream_NLs';
+			end
+		end
+		mnim_out = mnim;
 	end
     
 end
@@ -471,14 +581,16 @@ end
 %% ********************  Helper Methods ********************************
 methods
     
-	function mnim = add_Msubunit( mnim, subunit, Mtargets )
-	% Usage: mnim = mnim.add_Msubunit( subunit, Mtargets )
+	function mnim = add_Msubunit( mnim, subunit, Mtargets, Mweights )
+	% Usage: mnim = mnim.add_Msubunit( subunit, Mtargets, <Mweights>)
 	%
 	% INPUTS:
 	%   subunit:    this can either be a subunit class to add to the NIM 
 	%               model, or a number of an existing subunit to clone for 
 	%               a multiplicative subunit 
 	%   Mtargets:   array specifying subunits that new Msubunit multiplies
+	%	Mweights:	array specifying weights on subunit output before 1 is
+	%				added; defaults to 0
 	% 
 	% OUTPUTS:
 	%   mnim:       updated multNIM object with new Msubunit
@@ -486,28 +598,36 @@ methods
 		% Error checking on inputs
 		assert( all(Mtargets <= length(mnim.nim.subunits)), 'Mtargets must be existing subunits.' )
 
+		if nargin < 4
+			Mweights = ones(length(Mtargets),1);
+		end
+		
 		% check identity of subunit
 		if isa(subunit,'double') 
-        % clone existing subunit from NIM
-        assert( subunit <= length(mnim.nim.subunits), 'subunit to be multiplicative must be a normal subunit' )
-        Msubunit = mnim.subunits(subunit);
-        mnim.Msubunits(end+1) = Msubunit;
-        % Default nonlinearity/scaling?
-    else
-        mnim.Msubunits = cat(1, mnim.Msubunits, subunit );
-    end
+			% clone existing subunit from NIM
+			assert( subunit <= length(mnim.nim.subunits), 'subunit to be multiplicative must be a normal subunit' )
+			Msubunit = mnim.subunits(subunit);
+			mnim.Msubunits(end+1) = Msubunit;
+			% Default nonlinearity/scaling?
+		else
+			mnim.Msubunits = cat(1, mnim.Msubunits, subunit );
+		end
 
-    mnim.Mtargets{end+1} = Mtargets;
+		mnim.Mtargets{end+1} = Mtargets;
+		mnim.Mweights{end+1} = Mweights;
     
 		end
     
 	function Msub = clone_to_Msubunit( mnim, subN, weight, filter_flip )
-	% Usage: Msub = mnim.clone_to_Msubunit( subN, <weight>, <filter_flip> ) 
+	% Usage: Msub = mnim.clone_to_Msubunit( subN, <Mweights>, <filter_flip> ) 
 	% Uses an existing subunit of an NIM object as an Msubunit
 	%
 	% INPUTS:
 	%   subN:           index of NIM subunit to clone into an Msubunit
-	%   <weight>:       desired weight (+/-1) of new subunit
+	%   <weight>:	    desired weight (+/-1) of new subunit; this is
+	%					different from Mweights, which weight the
+	%					output of this subunit differently for each of its
+	%					targets
 	%   <filter_flip>:  if anything - literally anything - is in this
 	%                   input, we'll flip the filter's sign
 	% OUTPUTS:
@@ -554,12 +674,12 @@ methods
 		nimtmp.subunits = mnim.Msubunits;
 		[~,~,Mmod_internals] = nimtmp.eval_model( Robs, stims );
 		mod_internals.M_gint = Mmod_internals.gint;
-		mod_internals.M_fgint = Mmod_internals.fgint;
+		mod_internals.M_fgint = Mmod_internals.fgint; % Note that these are not weighted by Mweights!
 		
 	end
     
 	function [sub_outs,fg_add,gmults] = get_subunit_outputs( mnim, stims )
-	% Usage: [sub_outs,fg_add,fg_mult] = mnim.get_subunit_outputs( stims )
+	% Usage: [sub_outs,fg_add,gmults] = mnim.get_subunit_outputs( stims )
 	% 
 	% Calculates output of all subunits (additive and multiplicative) and separates additive and multiplicative components
 	% INPUTS:
@@ -569,7 +689,7 @@ methods
 	%   sub_outs:   T x num_add_subunits matrix of additive subunit outputs
 	%               multiplied by their corresponding gain functions
 	%   fg_add:     T x num_add_subunits matrix of additive subunit outputs
-	%   fg_mult:    T x num_add_subunits matrix of gmults from Msubunit outputs
+	%   gmults:     T x num_add_subunits matrix of gmults from Msubunit outputs
 	
 		% Get additive subunit outputs
 		[~,~,mod_internals] = mnim.nim.eval_model( [], stims );
@@ -581,7 +701,7 @@ methods
 		end
 	
 		% Calculate multiplicative effect
-		gmults = mnim.calc_gmults(stims);  % T x num_add_subunits; corresponds to fg_add, contain 1+f()  
+		gmults = mnim.calc_gmults(stims);  % T x num_add_subunits; corresponds to fg_add, contains 1+w*f()  
 		sub_outs = fg_add;                 % default value is additive subunit output
 		for nn = 1:length(mnim.Msubunits)
 			sub_outs(:,mnim.Mtargets{nn}) = fg_add(:,mnim.Mtargets{nn}) .* gmults(:,mnim.Mtargets{nn}); 
@@ -737,8 +857,10 @@ methods (Hidden)
 	%   stims:      cell array of stim matrices for model fitting
 	% OUTPUTS:
 	%   gmults:     T x num_add_units matrix of gmults, one for each additive subunit in mnim.nim NIM object
-	%   fg_mults:   T x num_mult_units matrix of multiplicative subunit outputs (includes weights)
-			
+	%   fg_mult:    1 x num_mult_units cell array of multiplicative subunit outputs. Cell i contains the
+	%				output of Msubunit(i) for ALL its targets (a T x num_targs matrix), since these outputs
+	%				may be different depending on the weights
+
 		% set default gmults
 		[~,~,mod_int_add] = mnim.nim.eval_model( [], stims ); % cheap way to get size of gmults for diff nim classes
 		gmults = ones(size(mod_int_add.gint));  % default gains of 1 for every subunit 
@@ -749,14 +871,16 @@ methods (Hidden)
 			nimtmp = mnim.nim;
 			nimtmp.subunits = mnim.Msubunits;
 			[~,~,mod_int_mult] = nimtmp.eval_model( [], stims );
-			fg_mult = mod_int_mult.fgint;
-			% only change gmults for additive subunits targeted by Msubunits
+			fg_mult = cell(1,length(mnim.Msubunits));
+			% weight subunit outputs and add 1 for every targeted additive
+			% subunit
 			for nn = 1:length(mnim.Msubunits)
-				% multiply existing gmults of targets by output of selected subunit
 				targets = mnim.Mtargets{nn};
-				weight = mnim.Msubunits(nn).weight;
-				fg_mult(:,nn) = weight*fg_mult(:,nn);
-				gmults(:,targets) = gmults(:,targets).*repmat(1+fg_mult(:,nn),1,length(targets));
+				weights = mnim.Mweights{nn};
+				% multiply by both weight in subunit (which might be set to
+				% +/-1) and weights specified in Mweights
+				fg_mult{nn} = bsxfun(@times,repmat(mnim.Msubunits.weight*mod_int_mult.fgint(:,nn),1,length(targets)),weights(:)');
+				gmults(:,targets) = gmults(:,targets).*(1+fg_mult{nn});
 			end
 		end	
 	end
@@ -765,7 +889,7 @@ methods (Hidden)
 	% Usage: [nim,gmults,stims_plus] = format4Mfitting( mnim, stims, Mtargs )
 	% 
 	% setup for fitting multiplicative subunits as NIM additive units with 
-	% gmults taking care of outputs from original additive subunits 
+	% gmults taking care of outputs from original additive subunits and 
 	% original multiplicative subunits that are not being fit. Also outputs
 	% proper stim cell array.
 	% Note: method is called from fit_Mfilters, so no two multiplicative 
@@ -778,9 +902,10 @@ methods (Hidden)
 	%               multiplicative subunits
 	%   Mtargs:     array of indices specifying which multiplicative
 	%               subunits are to be fit
+	%
 	% OUTPUTS:
 	%   nim:        updated NIM object that contains subunits to be fit
-	%   gmults:     T x num(Mtargets) matrix of gmult values obtained from
+	%   gmults:     T x num(Mtargs) matrix of gmult values obtained from
 	%               original subunits and nontarget multiplicative subunits
 	%   stims_plus: same cell array as stims with an additional stim matrix
 	%               to properly take into account offsets due to shuffling around model terms
@@ -795,54 +920,56 @@ methods (Hidden)
 		end
 
 		% Extract relevant outputs from add and mult subunits
-		[~,fg_add] = mnim.get_subunit_outputs( stims_plus ); % fg_add incorporates weight
-		[~,fg_mult] = mnim.calc_gmults( stims_plus );        % fg_mult incorporates weight
+		[~,fg_add] = mnim.get_subunit_outputs( stims ); % fg_add incorporates weight
+		[~,fg_mult] = mnim.calc_gmults( stims );        % fg_mult incorporates weights (from both the NIM 'weight' property and Mweights) but not 1+ offset
 
 		% Multiply output of additive subunits and non-target mult subunits
 		g = fg_add;
 		for i = Mnontargs
 			targs = mnim.Mtargets{i};
-			g(:,targs) = g(:,targs).*repmat((1+fg_mult(:,i)),1,length(targs));
+			g(:,targs) = g(:,targs).*(1+fg_mult{i});
 		end
 
-		% Now each Mtarg should be multiplied by the g's corresponding to its targets
+		% Now each Mtarg should be multiplied by the weighted sum of the g's corresponding to
+		% its targets
 		NMsubs = length(Mtargs);
 		gmults = ones(size(g,1),NMsubs+1);  % extra-dim of ones is to multiply additive offset term
 		for i = 1:length(Mtargs)
-			gmults(:,i) = sum(g(:,mnim.Mtargets{Mtargs(i)}),2);
+			gmults(:,i) = sum(bsxfun(@times,g(:,mnim.Mtargets{Mtargs(i)}),mnim.Mweights{i}(:)'),2);
 		end
-    % gmults for the offset is given by sum of all g's, since those
-    % associated with targets being fit have a +1 and those not still
-    % need to be included
-    gmults(:,end) = sum(g,2);
+		
+		% gmults for the offset is given by sum of all g's, since those
+		% associated with targets being fit have a +1 and those not still
+		% need to be included
+		gmults(:,end) = sum(g,2);
 
-    % add "stimulus" for offset term to stims  
-    offset_xtarg = length(stims_plus)+1;
-    stims_plus{offset_xtarg} = ones(size(g,1),1);
+		% add "stimulus" for offset term to stims  
+		offset_xtarg = length(stims_plus)+1;
+		stims_plus{offset_xtarg} = ones(size(g,1),1);
 
-    % Construct NIM for filter minimization
-    nim = mnim.nim;
-    nim.subunits = mnim.Msubunits(Mtargs);
+		% Construct NIM for filter fitting
+		nim = mnim.nim;
+		nim.subunits = mnim.Msubunits(Mtargs);
 
-    % make last NIM-subunit add in additive terms
-    nim.subunits(NMsubs+1) = nim.subunits(NMsubs);
-    nim.subunits(end).Xtarg = offset_xtarg;
-    nim.subunits(end).filtK = 1;
-    nim.subunits(end).NLoffset = 0;
-    if isa(nim.subunits(end),'LRSUBUNIT')
-        nim.subunits(end).kt = 1;
-        nim.subunits(end).ksp = 1;
-    end
-    nim.subunits(end).NLtype = 'lin';
-    nim.subunits(end).weight = 1;
-    nim.subunits(end).reg_lambdas = SUBUNIT.init_reg_lambdas();
+		% make additional NIM-subunit to account for additive terms
+		nim.subunits(NMsubs+1) = nim.subunits(NMsubs);
+		nim.subunits(end).Xtarg = offset_xtarg;
+		nim.subunits(end).filtK = 1;
+		nim.subunits(end).NLoffset = 0;
+		if isa(nim.subunits(end),'LRSUBUNIT')
+			nim.subunits(end).kt = 1;
+			nim.subunits(end).ksp = 1;
+		end
+		nim.subunits(end).NLtype = 'lin';
+		nim.subunits(end).weight = 1;
+		nim.subunits(end).reg_lambdas = SUBUNIT.init_reg_lambdas();
 
-    % Add offset terms to stim_params
-    stimpar1 = nim.stim_params(1);
-    stimpar1.dims = [1 1 1];
-    stimpar1.tent_spacing = [];
-    stimpar1.up_fac = 1;  % since any up_fac is already taken into account in subunit outputs
-    nim.stim_params(offset_xtarg) = stimpar1;
+		% Add offset terms to stim_params
+		stimpar1 = nim.stim_params(1);
+		stimpar1.dims = [1 1 1];
+		stimpar1.tent_spacing = [];
+		stimpar1.up_fac = 1;  % since any up_fac is already taken into account in subunit outputs
+		nim.stim_params(offset_xtarg) = stimpar1;
 				
     end
 	
