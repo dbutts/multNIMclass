@@ -18,7 +18,7 @@ end
 methods
 
 	function mnim = multNIM( nim, Msubunits, Mtargets, Mweights )
-	% Usage: mnim = multNIM( nim, Msubunits, Mtargets, <Mweights> )
+	% Usage: mnim = multNIM( nim, <Msubunits, Mtargets>, <Mweights> )
 	%
 	% INPUTS:
 	%   nim:        either an object of the NIM or sNIM class
@@ -38,7 +38,13 @@ methods
 	%   mnim:       initialized multNIM object
 	
 		% Handle the no-input-argument case by returning a null model. This is important when initializing arrays of objects
-		if nargin < 1
+		if nargin < 3
+			if nargin > 0
+				mnim.nim = nim;
+			else
+				mnim.nim = [];
+			end
+			mnim.Msubunits = [];
 			return
 		end
 
@@ -164,7 +170,9 @@ methods
 
 		% Copy filters back to their locations
 		mnim_out = mnim;
-		[mnim_out.Msubunits(Mtar).subunit] = nim_swap.subunits(1:NMsubs);	% save mult subunits (not offset subunit)
+		for nn = 1:NMsubs  % save mult subunits (not offset subunit)
+			mnim_out.Msubunits(Mtar(nn)).subunit = nim_swap.subunits(nn);	
+		end
 		mnim_out.nim = nim_swap;											% save upstream/spkNL params
 		mnim_out.nim.subunits = mnim.nim.subunits;							% save add subunits
     
@@ -813,7 +821,7 @@ methods
 
 		% Plot Mult subunits
 		for nn = 1:NMmods
-			dims = mnim.nim.stim_params(mnim.nim.subunits(nn).Xtarg).dims;
+			dims = mnim.nim.stim_params(mnim.Msubunits(nn).subunit.Xtarg).dims;
 			mnim.Msubunits(nn).subunit.display_filter( dims, [Nrows Ncols (nn-1)*Ncols+4], 'notitle', 1 );
 			subplot( Nrows, Ncols, (nn-1)*Ncols+6 )
 			if isempty(mod_outs)
