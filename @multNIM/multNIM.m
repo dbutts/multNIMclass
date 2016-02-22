@@ -14,6 +14,9 @@ properties (Hidden)
 	create_on = date;   %date model was generated
 end	
 
+% TODO
+
+
 %% ******************** constructor ********************************
 methods
 
@@ -207,15 +210,28 @@ methods
 	% j, where the gain signal acting on additive subunit j is 
 	% (1 + w_{i,j}*(output of mult subunit i)
 	%
-	% Note 1: Specify which Msubunit weights to optimize using 'subs' option, 
-	%	numbered by their index in Msubunits array
-	% Note 2: Specify which weights from the chosen Msubunits to fit using the 
-	%	'weight_targs' option. Should be a cell array whose ith cell
-	%	contains a subset of the values in 'targets' field from the ith 
-	%	Msubunit in the 'subs' array
-	% Note 3: method only handles case where at most one weight per
+	% Note: method only handles case where at most one weight per
 	%	additive subunit is fit. In the event that more than one weight is
 	%	specified the method will exit with an error message.
+	%
+	% Optional flags:
+	%	'subs': array that specifies which Msubunit weights to optimize, 
+	%			numbered by their index in Msubunits array.
+	%			Default: all Msubunits
+	%	'weight_targs': cell array that specifies which weights from the
+	%			selected Msubunits to fit. Should be a cell array whose ith
+	%			cell contains a subset of the values in 'targets' field 
+	%			from the ith Msubunit in the 'subs' array. Alternatively, if
+	%			only a single weight per Msubunit is to be fit, the
+	%			'weight_targs' option will accept an array (rather than a 
+	%			cell array) as input, with one value per Msubunit in the
+	%			'subs' array.
+	%	'positive_weights': 1 to constrain weights to be positive, 0
+	%			otherwise. Default = 1.
+	%
+	% OUTPUTS:
+	%   mnim_out:   updated multNIM object
+	
 	
 		% Ensure proper format of stims cell array
 		if ~iscell(stims)
@@ -225,20 +241,39 @@ methods
 		end
 
 		% Parse optional arguments, separating those needed in this method from those needed as inputs to fit_filters method in NIM
-		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs','weight_targs'} );
+		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs','weight_targs','positive_weights'} );
+		
+		% get weight constraints
+		if isfield( parsed_inputs, 'positive_weights' )
+			positive_weights = parsed_inputs.positive_weights;
+			assert(ismember(positive_weights,[0,1]),'''positive_weights'' flag must be set to 0 or 1')
+		else
+			positive_weights = 1;								% Default to constraining weights to be positive
+		end
 		
 		% Save indices of mult subunits targeted for fitting
 		if isfield( parsed_inputs, 'subs' ) 
 			Mtar = parsed_inputs.subs;
 		else
-			Mtar = 1:length( mnim.Msubunits );
+			Mtar = 1:length( mnim.Msubunits );					% Default to all Msubunits
 		end
+		% Ensure values in Mtar field match possible Msubunits
 		assert(all(ismember(Mtar,1:length(mnim.Msubunits))),'Invalid ''subs'' input')
 		NMsubs = length(Mtar);
 
 		% Save indices of additive subunits targeted for fitting
 		if isfield( parsed_inputs, 'weight_targs' ) 
 			Atar = parsed_inputs.weight_targs;
+			% turn into cell array if not already
+			if ~iscell(Atar)
+				tmp = Atar;
+				tmp = tmp(:)';									% ensure tmp is a row vector
+				clear Atar
+				Atar = num2cell(tmp);							% make Atar a 1xnum_subs cell array
+			end
+			% check for proper dimensions; should only be one Atar cell per
+			% Mtar
+			assert(length(Mtar)==length(Atar),'Mismatch between ''subs'' and ''weight_targs'' input dimensions')
 		else
 			% default is all targets of each Mtar
  			[Atar{1:NMsubs}] = mnim.Msubunits(Mtar).targets;	% each cell of Atar will contain targets from one Msubunit
@@ -252,13 +287,16 @@ methods
 			assert(all( ismember(Atar{i}, mnim.Msubunits(Mtar(i)).targets)), 'Atar does not match possible targets for Msubunit %i',i);
 		end
 		
-		% Creat NIM for fitting weights; a single subunit will contain a
+		
+		
+		% Create NIM for fitting weights; a single subunit will contain a
 		% filter with all the combined weights that are being fit
 		[nim_weight,stims_plus] = format4Mweightfitting( mnim, stims, Mtar, Atar );
+		nim_weight.subunits(1).Ksign_con = positive_weights;	% set weight constraints
 
 		% Append necessary options to varargin to pass to fit_filters
 		modvarargin{end+1} = 'subs';
-		modvarargin{end+1} = 1;			% just fit weights
+		modvarargin{end+1} = 1;									% just fit weights
 
 		% Fit filters using NIM method
 		nim_weight = nim_weight.fit_filters( Robs, stims_plus, modvarargin{:} );
@@ -596,6 +634,240 @@ methods
 		mnim_out = mnim;
 	end
     
+	function mnim_out = fit_Msequential_weights( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = mnim.fit_Msequential_weights( Robs, stims, Uindx, varargin )
+	% Fits weights of multiplicative subunits, and handles case where the 
+	% desired weights to optimize target the same additive subunits.
+	%
+	% INPUTS:
+	%   Robs:
+	%   stim:
+	%   optional flags:
+	%       any optional flag argument used for fit_Mweights method
+	%       'subs':  
+	%           option 1 - array of Msubunit indices indicating which
+	%               subunits' weights will be optimized. If all selected 
+	%				subunits act on unique additive subunits, fit_Mweights
+	%				is called. If the Msubunits selected do NOT act on 
+	%				unique additive subunits, there are two options:
+	%				1) select which weights will be optimized using the 
+	%				'weight_targs' flag (see below)
+	%				2) if 'weight_targs' flag is not set or is not feasible,
+	%				the indices are arranged so that all weights of 
+	%				specified Msubunits	will be fit once by calling 
+	%				fit_Mweights sequentially; in the case of multiple 
+	%				Msubunits acting on a single additive subunit, the 
+	%				order in which the weights are fit follow the
+	%				order of the Msubunits in the input
+	%           option 2 - Nx1 cell array of Msubunit indices indicating 
+	%               which Msubunits should be fit during each of N calls to
+	%               fit_Mweights. In this case the steps outlined in option
+	%               1 above are carried out for each cell.
+	%           option 3 - if subs is empty or 'subs' is not listed as an
+	%               optional flag, all Msubunits are selected and the
+	%               method defaults to the behavior in option 1
+	%		'weight_targs':
+	%			option 1 - matches 'subs' option 1; a 1xN array of Msubunit
+	%				indices is specified, and 'weight_targs' should be a 1xN
+	%				cell array where the indices in each cell specify which
+	%				weights of the corresponding Msubunit should be fit.
+	%			option 2 - matches 'subs' option 2; a 1xN cell array. Each
+	%				cell is itself a cell array, such that the indices in 
+	%				cell{n}{m} are the weights from Msubunit m that should
+	%				be fit on the nth call to fit_Mweights. See below for
+	%				an example.
+	%			option 3 - 'weight_targs' is empty or not set as an
+	%				optional flag; in this case, it is assumed that all
+	%				weights for specified Msubunits are to be fit.
+	%	'positive_weights': 1 to constrain weights to be positive, 0
+	%			otherwise. Default = 1.
+	%
+	%
+	%	Example: Msubunits(1).targets = [1 2 3];
+	%			 Msubunits(2).targets = [1 3];
+	%			 Msubunits(3).targets = [4];
+	%
+	%   Using option1/option1
+	%	mnim.fit_Msequential_weights(Robs,stim,'subs',[1 2 3],'weight_targs',{1,3,4})
+	%		will fit Msubunit(1) weight on 1st additive subunit,
+	%		Msubunit(2) weight on 3rd additive subunit and Msubunit(3) 
+	%		weight on 4th additive subunit. All weights will be fit 
+	%		simultaneously.
+	%	mnim.fit_Msequential_weights(Robs,stim,'subs',[1 2 3],'weight_targs',{1,[1,3],4})
+	%		In this case not all specified weights can be fit the same time
+	%		since the weight from Msubunit(1) to additive subunit 1 and the
+	%		weight from Msubunit(2) to additive subunit 1 are both specified.
+	%		Instead, the fitting order will be rearranged as explained 
+	%		above, so that the equivalent call would be
+	%		mnim.fit_Msequential_weights(...,'subs',{[1 2 3],[2]},'weight_targs',{{1,3,4},{1})
+	%
+	%	Using option2/option2
+	%	mnim.fit_Msequential_weights(...,'subs',{[1 3],2,1},'weight_targs',{{[1 2 3],4},{[1 3]},{[1 3]}})
+	%		will call fit_Mweights 3 times ('subs' is a 1x3 cell array). 
+	%		On the first call, weights from Msubunit(1) on additive
+	%			subunits 1,2 and 3 will be fit, along with weights from
+	%			Msubunit(3) on additive subunit 4.
+	%		On the second call, weights from Msubunit(2) on additive
+	%			subunits 1 and 3 will be fit
+	%		On the third call, weights from Msubunit(1) on additive
+	%			subunits 1 and 3 will be fit
+	%
+	% OUTPUTS:
+	%   mnim_out:   updated multNIM object
+    
+		% Ensure proper format of stims cell array
+		if ~iscell(stims)
+			tmp = stims;
+			clear stims
+			stims{1} = tmp;
+		end
+
+		% Parse optional arguments, separating those needed in this method from those needed as inputs to fit_filters method in NIM
+		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'subs','weight_targs','weight_targs'} );
+
+		% get weight constraints
+		if isfield( parsed_inputs, 'positive_weights' )
+			positive_weights = parsed_inputs.positive_weights;
+			assert(ismember(positive_weights,[0,1]),'''positive_weights'' flag must be set to 0 or 1')
+		else
+			positive_weights = 1;								% Default to constraining weights to be positive
+		end
+		
+		% Save indices of mult subunits targeted for fitting
+		if isfield( parsed_inputs, 'subs' ) 
+			Mtar = parsed_inputs.subs;
+			% turn into cell array if not already
+			if ~iscell(Mtar)
+				tmp = Mtar;
+				clear Mtar
+				Mtar{1} = tmp;									% make Mtar a 1x1 cell array
+			end
+		else
+			Mtar{1} = 1:length( mnim.Msubunits );				% Default to all Msubunits
+		end
+		% Ensure values in Mtar cells match possible Msubunits
+		for i = 1:length(Mtar)
+			assert(all(ismember(Mtar{i},1:length(mnim.Msubunits))),'Invalid ''subs'' input')
+		end
+		
+		% Save indices of additive subunits targeted for fitting
+		if isfield( parsed_inputs, 'weight_targs' ) 
+			Atar = parsed_inputs.weight_targs;
+			% turn into cell array if not already
+			if isempty(Atar)
+				% default is all targets of each Msubunit in each Mtar cell
+				for i = 1:length(Mtar)
+					[Atar{i}{1:length(Mtar{i})}] = mnim.Msubunits(Mtar{i}).targets; % each cell of Atar{i} will contain targets from one Msubunit
+				end
+			elseif ~iscell(Atar)
+				% assume 1-1 correspondence between values in this array
+				% and the Msubunits in Mtar{1}
+				tmp = Atar;
+				clear Atar
+				Atar{1}{1} = tmp;								% make Atar{1} a 1x1 cell array
+			elseif ~iscell(Atar{1})
+				% assume 1-1 correspondence between values in this cell
+				% array and the Msubunits in Mtar{1}
+				tmp = Atar;
+				clear Atar
+				Atar{1} = tmp;
+			end
+			% check for proper dimensions; should only be one Atar cell per Mtar cell
+			assert(length(Mtar)==length(Atar),'Mismatch between ''subs'' and ''weight_targs'' input dimensions')
+		else
+			% default is all targets of each Msubunit in each Mtar cell
+			for i = 1:length(Mtar)
+				[Atar{i}{1:length(Mtar{i})}] = mnim.Msubunits(Mtar{i}).targets; % each cell of Atar{i} will contain targets from one Msubunit
+			end
+		end
+		
+		% Ensure specified Atars match up with possible Msubunit targets
+		for i = 1:length(Mtar)
+			for j = 1:length(Mtar{i})
+				assert(all( ismember(Atar{i}{j}, mnim.Msubunits(Mtar{i}(j)).targets)), 'Atar index does not match possible targets for Msubunit %i\n',Mtar{i}(j));
+			end
+		end
+		
+		
+		
+		
+		% loop through Mtar, breaking up the calls to fit_Mweights if
+		% necessary
+		for i = 1:length(Mtar)
+			
+			% Check to see if multiple weights are being fit on a single
+			% additive subunit; if so, flag and take care of below
+			reset_order_flag = 0;		
+			add_targets = [];
+			for j = 1:length(Mtar{i})
+				add_targets = [add_targets Atar{i}{j}];
+				if length(add_targets) ~= length(unique(add_targets))
+					% at least one subunit has been targeted more than once
+					warning('Cannot simultaneously fit two weights acting on same additive subunit; changing fit order\n')
+					reset_order_flag = 1;
+					break
+				end
+			end
+			
+			% Partition Mtar{i} if necessary, with lower indices of Msubunits taking priority
+			temp_Mtar = {};					% store new Mtar; need a cell array since there will potentially be multiple fits
+			temp_Atar = {};					% store new Atar
+			if reset_order_flag
+				remaining_Mtargs = Mtar{i};	% get list of all targeted Msubunits
+				remaining_Atargs = Atar{i};	% get corresponding list (still a cell array) of additive targets
+				% Loop through Mtar until no weights are left to fit
+				while ~isempty(remaining_Mtargs)
+					curr_Mtargs = [];		% current set of targeted Msubunits
+					curr_Atargs = {};		% corresponding set of targets of those targeted subunits
+					rm_indxs = [];			% indices of remaining_Mtargs/remaining_Atargs to remove
+					for j = 1:length(remaining_Mtargs)
+						[~,Atargs_indx] = ismember(remaining_Atargs{j},[curr_Atargs{:}]);
+						if any(Atargs_indx == 0)
+							% if any members of remaining_Atargs{j} are NOT
+							% in the set of curr_Atargs, put them there
+							curr_Mtargs = [curr_Mtargs remaining_Mtargs(j)];	% add this Msubunit to temp_Mtar
+							curr_Atargs{end+1} = remaining_Atargs{j}(Atargs_indx == 0);
+							remaining_Atargs{j}(Atargs_indx == 0) = [];
+							if isempty(remaining_Atargs{j})
+								% clear remaining A- and M- targs if nothing left
+								rm_indxs = [rm_indxs j];
+							end
+						end
+					end
+					remaining_Atargs(rm_indxs) = [];	% remove cells of remaining_Atargs that have been fully assigned
+					remaining_Mtargs(rm_indxs) = [];	% remove corresponding remaining_Mtargs
+					temp_Atar{end+1} = curr_Atargs;		% save curr_Atargs
+					temp_Mtar{end+1} = curr_Mtargs;		% save curr_Mtargs
+				end
+			else
+				% we do not need to reset the order; change variable names
+				% for compatibility with reset_order variables above
+				temp_Mtar{1} = Mtar{i};
+				temp_Atar{1}{1} = Atar{i};
+			end
+					
+			% set number of calls to fit_Mweights
+			Nfits = length(temp_Mtar); 
+			
+			modvarargin{end+1} = 'subs';			% 'subs' option was removed by parse_varargin
+			counter = length(modvarargin);
+			modvarargin{end+1} = [];
+			modvarargin{end+1} = 'weight_targs';    % 'weight_targs' option was removed by parse_varargin
+			modvarargin{end+1} = [];
+			for n = 1:Nfits
+				modvarargin{counter+1} = temp_Mtar{n};
+				modvarargin{counter+3} = temp_Atar{n};
+				mnim = mnim.fit_Mweights(Robs,stims,modvarargin{:});
+				% modify fit history
+				mnim.nim.fit_props.fit_type = 'Mweight';
+				mnim.nim.fit_history(end).fit_type = 'Mweight';
+			end
+		end
+			
+		mnim_out = mnim;
+
+	end
+	
 end
 
 %% ********************  Helper Methods ********************************
