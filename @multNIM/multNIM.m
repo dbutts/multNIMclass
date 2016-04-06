@@ -504,7 +504,10 @@ methods
 
     % Copy filters back to their locations
     mnim_out = mnim;
-    [mnim_out.Msubunits(Mtar).subunit] = nim_swap.subunits(1:NMsubs);	% save mult subunits (not offset subunit)
+		for nn = 1:NMsubs
+			mnim_out.Msubunits(Mtar(nn)).subunit = nim_swap.subunits(nn); % save mult subunits (not offset subunit)
+		end
+		% Replaced this: [mnim_out.Msubunits(Mtar).subunit] = nim_swap.subunits(1:NMsubs);
     mnim_out.nim = nim_swap;											% save upstream/spkNL params
     mnim_out.nim.subunits = mnim.nim.subunits;							% save add subunits
     
