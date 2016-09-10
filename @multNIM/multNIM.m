@@ -206,13 +206,11 @@ methods
 	function mnim_out = fit_Mweights( mnim, Robs, stims, varargin )
 	% Usage: mnim_out = mnim.fit_Mweights( Robs, stims, Uindx, varargin )
 	%
-	% Fits weights w_{ij} of multiplicative subunit i on additive subunit
-	% j, where the gain signal acting on additive subunit j is 
-	% (1 + w_{i,j}*(output of mult subunit i)
+	% Fits weights w_{ij} of multiplicative subunit i on additive subunit j, where the 
+	% gain signal acting on additive subunit j is (1 + w_{i,j}*(output of mult subunit i)
 	%
-	% Note: method only handles case where at most one weight per
-	%	additive subunit is fit. In the event that more than one weight is
-	%	specified the method will exit with an error message.
+	% Note: method only handles case where at most one weight per additive subunit is fit. 
+	% In the event that more than one weight is specified the method will exit with an error message.
 	%
 	% Optional flags:
 	%	'subs': array that specifies which Msubunit weights to optimize, 
@@ -269,18 +267,16 @@ methods
 				tmp = Atar;
 				tmp = tmp(:)';									% ensure tmp is a row vector
 				clear Atar
-				Atar = num2cell(tmp);							% make Atar a 1xnum_subs cell array
+				Atar = num2cell(tmp);						% make Atar a 1xnum_subs cell array
 			end
-			% check for proper dimensions; should only be one Atar cell per
-			% Mtar
+			% check for proper dimensions; should only be one Atar cell per Mtar
 			assert(length(Mtar)==length(Atar),'Mismatch between ''subs'' and ''weight_targs'' input dimensions')
 		else
 			% default is all targets of each Mtar
  			[Atar{1:NMsubs}] = mnim.Msubunits(Mtar).targets;	% each cell of Atar will contain targets from one Msubunit
 		end
 		
-		% Ensure multiple weights are not being fit on a single additive
-		% subunit
+		% Ensure multiple weights are not being fit on a single additive subunit
 		assert(length([Atar{:}])==length(unique([Atar{:}])),'Cannot simultaneously fit two weights acting on same additive subunit')
 		% Ensure specified Atars match up with possible Msubunit targets
 		for i = 1:length(Mtar)
@@ -294,7 +290,7 @@ methods
 
 		% Append necessary options to varargin to pass to fit_filters
 		modvarargin{end+1} = 'subs';
-		modvarargin{end+1} = 1;									% just fit weights
+		modvarargin{end+1} = 1;	% just fit weights
 
 		% Fit filters using NIM method
 		nim_weight = nim_weight.fit_filters( Robs, stims_plus, modvarargin{:} );
@@ -302,9 +298,9 @@ methods
 		% Copy filters back to their locations
 		mnim_out = mnim;
 		% Msubunits have not changed
-		mnim_out.nim = nim_weight;                              % to save upstream/spkNL params
+		mnim_out.nim = nim_weight;                          % to save upstream/spkNL params
 		mnim_out.nim.stim_params = mnim.nim.stim_params;		% to save stim_params
-		mnim_out.nim.subunits = mnim.nim.subunits;              % to save additive subunits
+		mnim_out.nim.subunits = mnim.nim.subunits;          % to save additive subunits
 		
 		% update Mweights, which are found in nim_swap filter
 		beg_indx = 0;
@@ -316,7 +312,11 @@ methods
 			% Normalize weights (max-value of 1)
 			if ~isfield(parsed_inputs,'no_normalize') || (parsed_inputs.no_normalize == 0)
 				nrm = max(mnim_out.Msubunits(Mtar(i)).weights(Atar_indx));
-				mnim_out.Msubunits(Mtar(i)).weights(Atar_indx) = mnim_out.Msubunits(Mtar(i)).weights(Atar_indx)/nrm;
+				if nrm > 0
+					mnim_out.Msubunits(Mtar(i)).weights(Atar_indx) = mnim_out.Msubunits(Mtar(i)).weights(Atar_indx)/nrm;
+				else
+					warning('Weights taken to zero.')
+				end
 			end
 		end
 			
@@ -375,6 +375,42 @@ methods
 			end	
 		end
 	end
+
+	function mnim_out = init_Anonpar_NLs( mnim, Xstims, varargin )
+	% Usage: mnim_out = mnim.init_Anonpar_NLs( Xstims, varargin )
+	
+		mnim_out = mnim;
+		mnim_out.nim = mnim_out.nim.init_nonpar_NLs( Xstims, varargin{:} );
+	end
+
+	function mnim_out = init_Mnonpar_NLs( mnim, Xstims, varargin )
+	% Usage: mnim_out = mnim.init_Mnonpar_NLs( Xstims, varargin )
+	
+		[~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'subs'} );
+
+		nimtmp = mnim.nim;
+		NAsub = length(nimtmp.subunits);
+		NMsub = length(mnim.Msubunits);
+		if isfield(parsed_options,'subs')
+			subs = parsed_options.subs + NAsub;
+		else
+			subs = NAsub + (1:NMsub);
+		end
+		
+		for nn = 1:NMsub
+			nimtmp.subunits(NAsub+nn) = mnim.Msubunits(nn).subunit(nn);
+		end
+		
+		modvarargin{end+1} = 'subs';
+		modvarargin{end+1} = subs;
+		
+		mnim_out = mnim;
+		nimtmp = nimtmp.init_nonpar_NLs( Xstims, modvarargin{:} );
+		for nn = 1:NMsub
+			mnim_out.Msubunits(nn).subunit = nimtmp.subunits(NAsub+nn);
+		end
+	end
+	
 	
 	function mnim_out = fit_AupstreamNLs( mnim, Robs, stims, varargin )
 	% Usage: mnim_out = mnim.fit_AupstreamNLs( Robs, stims, Uindx, varargin )
@@ -454,7 +490,56 @@ methods
 	mnim_out.nim.fit_history(end).fit_type = 'Mupstream_NLs';
     
 	end
+
+	function mnim_out = fit_alt_nonparNLs( mnim, Robs, stims, varargin )
+	% Usage: mnim_out = fit_alt_nonparNLs( mnim, Robs, stims, varargin )
+	%	
+	% use flag 'add_first' to fit Afilters before Mfilters
 		
+		LLtol = 0.0002; MAXiter = 12;
+
+		% Check to see if silent (for alt function)
+		[~,parsed_options,modvarargin] = NIM.parse_varargin( varargin, {'silent','add_first'} );
+		if isfield( parsed_options, 'silent' )
+			silent = parsed_options.silent;
+		else
+			silent = 0;
+		end
+				
+		modvarargin{end+1} = 'silent';
+		modvarargin{end+1} = 1;
+
+		LL = mnim.nim.fit_props.LL; LLpast = -1e10;
+		if ~silent
+			fprintf( 'Beginning LL = %f\n', LL )
+		end
+		
+		mnim_out = mnim;
+		if isfield( parsed_options, 'add_first')
+			mnim_out = mnim_out.fit_AupstreamNLs( Robs, stims, modvarargin{:} );
+			mnim_out = mnim_out.fit_alt_filters( Robs, stims, modvarargin{:} );
+		end
+
+		iter = 1;
+		while (((LL-LLpast) > LLtol) && (iter < MAXiter))
+
+			mnim_out = mnim_out.fit_MupstreamNLs( Robs, stims, modvarargin{:} );
+			mnim_out = mnim_out.fit_alt_filters( Robs, stims, modvarargin{:} );
+
+			mnim_out = mnim_out.fit_AupstreamNLs( Robs, stims, modvarargin{:} );
+			mnim_out = mnim_out.fit_alt_filters( Robs, stims, modvarargin{:} );
+
+			LLpast = LL;
+			LL = mnim_out.nim.fit_props.LL;
+			iter = iter + 1;
+
+			if ~silent
+				fprintf( '  Iter %2d: LL = %f\n', iter, LL )
+			end	
+		end
+	end
+	
+	
 	function mnim_out = reg_pathA( mnim, Robs, stims, Uindx, XVindx, varargin )
 	% Usage: mnim = reg_path( mnim, Robs, stims, Uindx, XVindx, varargin )
 
@@ -472,7 +557,7 @@ methods
 		%varargin{end+1} = 1;
 
 		mnim_out = mnim;
-		mnim_out.nim = mnim.nim.reg_path( Robs, stims, Uindx, XVindx, varargin{:} );
+		mnim_out.nim = mnim.nim.reg_path2( Robs, stims, Uindx, XVindx, varargin{:} );
 	end
 		
 	function mnim_out = reg_pathM( mnim, Robs, stims, Uindx, XVindx, varargin )
@@ -500,7 +585,7 @@ methods
     modvarargin{end+1} = 1:NMsubs;
 
     % use NIM method reg_path
-    nim_swap = nim_swap.reg_path( Robs, stims_plus, Uindx, XVindx, modvarargin{:} );
+    nim_swap = nim_swap.reg_path2( Robs, stims_plus, Uindx, XVindx, modvarargin{:} );
 
     % Copy filters back to their locations
     mnim_out = mnim;
