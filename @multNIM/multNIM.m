@@ -398,14 +398,14 @@ methods
 		end
 		
 		for nn = 1:NMsub
-			nimtmp.subunits(NAsub+nn) = mnim.Msubunits(nn).subunit(nn);
+			nimtmp.subunits(NAsub+nn) = mnim.Msubunits(nn).subunit;
 		end
 		
 		modvarargin{end+1} = 'subs';
 		modvarargin{end+1} = subs;
 		
-		mnim_out = mnim;
 		nimtmp = nimtmp.init_nonpar_NLs( Xstims, modvarargin{:} );
+		mnim_out = mnim;
 		for nn = 1:NMsub
 			mnim_out.Msubunits(nn).subunit = nimtmp.subunits(NAsub+nn);
 		end
@@ -481,7 +481,10 @@ methods
 
 	% Copy filters back to their locations
 	mnim_out = mnim;
-	[mnim_out.Msubunits(Mtar).subunit] = nim_swap.subunits(1:NMsubs);	% save mult subunits (not offset subunit)
+	for nn = 1:NMsubs
+		mnim_out.Msubunits(Mtar(nn)).subunit = nim_swap.subunits(nn);
+	end
+	%[mnim_out.Msubunits(Mtar).subunit] = nim_swap.subunits(1:NMsubs);	% save mult subunits (not offset subunit)
 	mnim_out.nim = nim_swap;											% save upstream/spkNL params
 	mnim_out.nim.subunits = mnim.nim.subunits;							% save add subunits
     
