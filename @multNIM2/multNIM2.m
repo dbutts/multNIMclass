@@ -581,7 +581,7 @@ methods
 		[~,parsed_inputs,modvarargin] = NIM.parse_varargin( varargin, {'target'} );
 		% Save indices of subunits targeted for fitting
 		if isfield( parsed_inputs, 'target' )
-			Mtar = parsed_inputs.subs;
+			Mtar = parsed_inputs.target;
 		else
 			Mtar = 1; %1:length( mnim2.Mnims );
 		end
@@ -595,8 +595,8 @@ methods
     % append necessary options to varargin to pass to fit_filters
     modvarargin{end+1} = 'gain_funs';
     modvarargin{end+1} = gmults;
-    %modvarargin{end+1} = 'subs';
-    %modvarargin{end+1} = 1:NMnims;
+    modvarargin{end+1} = 'subs';
+    modvarargin{end+1} = 1:length(mnim2.Mnims(Mtar).nim.subunits);
 
     % Use NIM method reg_path
     nim_swap = nim_swap.reg_path2( Robs, stims_plus, Uindx, XVindx, modvarargin{:} );
